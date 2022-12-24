@@ -6,38 +6,54 @@ import pandas as pd
 from pytorch_lightning import LightningDataModule
 import requests
 from PIL import Image
+from tqdm import tqdm
 
 class PairRankPoolDataset(Dataset):
     """Paired Embeddings Based On Pairwise Rankings of Images"""
-    def __init__(self, root="./path/to/clip-retrival/embeddings/"):
+    def __init__(self, root="./path/to/toloka"):
         super(PairRankPoolDataset, self).__init__()
         self.root = root
         # Load embeddings and scores for each root
         self.embeddings = self.loadEmbeddings(root)
-        self.metadata = self.loadMetadata(root)
-        print(f"Loaded {len(self.embeddings)} embeddings")
+        self.pair_metadata = self.loadPairMetadata(root)
+        print(f"Loaded {len(self.embeddings)} embeddings and {len(self.pair_metadata)} pairs")
+        self.valid = True if self.embeddings is not None and self.pair_metadata is not None else False
 
     def loadEmbeddings(self, root):
-            embedding_np = os.path.join(root, 'img_emb/img_emb_0.npy')
-            if not os.path.exists(embedding_np):
-                return None
-            x = np.load(embedding_np)
-            # Convert to torch tensor
-            x = torch.tensor(x, dtype=torch.float32)
-            return x
+        embedding_np = os.path.join(root, 'embeddings/img_emb/img_emb_0.npy')
+        if not os.path.exists(embedding_np):
+            return None
+        x = np.load(embedding_np)
+        # Convert to torch tensor
+        x = torch.tensor(x, dtype=torch.float32)
+        return x
 
-    def loadMetadata(self, root):
-        metadata_parquet = os.path.join(root, 'metadata/metadata_0.parquet')
+    def loadPairMetadata(self, root):
+        metadata_parquet = os.path.join(root, 'toloka.parquet')
         if not os.path.exists(metadata_parquet):
             return None
         y = pd.read_parquet(metadata_parquet)
         return y
 
     def __getitem__(self, index):
-        return self.data[index]
+        # Get random value
+        index = np.random.randint(0, len(self.pair_metadata))
+        # Get the pair
+        pair = self.pair_metadata.iloc[index]
+        # Get the embeddings
+        x1 = self.embeddings[pair['image_a_idx']]
+        x2 = self.embeddings[pair['image_b_idx']]
+        # Get the label
+        result = pair['result']
+        label = 1 if result == 'image_a' else 0 if result == 'image_b' else 'error in label'
+        if label == 'error in label':
+            raise ValueError("Error in label")
+        # Convert label to tensor
+        label = torch.tensor(label, dtype=torch.float32)
+        return {'emb1': x1, 'emb2': x2, 'label': label}
 
-    def len (self):
-        return len(self.df)
+    def __len__(self):
+        return len(self.pair_metadata)
 
 class RedditRankDataset(Dataset):
     """Paired Embeddings Based On Reddit Upvote Tallys in a Subreddit"""

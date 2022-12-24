@@ -151,9 +151,18 @@ def saveAsCSV(df):
 	img_b_df['url'] = df['INPUT:image_b']
 	# Concatenate the two dataframes
 	wds_df = pd.concat([img_a_df, img_b_df])
+	# Get unique url count
+	unique_urls = wds_df.drop_duplicates()
+	# For each unique_urls, get the rows where it appears in df
+	for i, row in unique_urls.iterrows():
+		url = row['url']
+		# Get all rows where url appears in df
+		url_rows = df.loc[(df['INPUT:image_a'] == url) | (df['INPUT:image_b'] == url)]
+		print(f'URL: {url}')
+	print(f'Unique urls: {len(unique_urls)}')
 	# Save as csv
 	csv_name = os.path.join(session_dir, 'wds.csv')
-	wds_df.to_csv(csv_name, index=False)
+	unique_urls.to_csv(csv_name, index=False)
 	return csv_name
 
 import pandas as pd
@@ -162,15 +171,33 @@ def loadTSV(root):
 	df = pd.read_csv(root, sep='\t')
 	df = filterBadAssignments(df)
 	df = filterBadInputs(df)
-	df = filterBadWorkers(df) # TODO
+	df = filterBadWorkers(df)
 	csv_name = saveAsCSV(df)
-	return csv_name
+	return csv_name, df
+
+def loadMetadata(dir):
+	# Load all the parquet files in the dir and pd.concat them
+	df = None
+	# Get all files in a directory recursively
+	for (dirpath, dirnames, filenames) in os.walk(dir):
+		for file in filenames:
+			if file.endswith('.parquet'):
+				# Load parquet file
+				parquet_path = os.path.join(dirpath, file)
+				parquet_df = pd.read_parquet(parquet_path)
+				# Add to df
+				if df is None:
+					df = parquet_df
+				else:
+					df = pd.concat([df, parquet_df])
+	return df
 
 session_dir = prepareFolders()
-csv_name = loadTSV('data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv')
+csv_name, toloka_df = loadTSV('data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv')
 wds_output_dir = os.path.join(session_dir, 'wds')
 if not os.path.exists(wds_output_dir):
 	os.makedirs(wds_output_dir)
+	print(f'Creating WebDataset of images at {wds_output_dir} using {csv_name}')
 	os.system(f"img2dataset --url_list={csv_name} --output_folder={wds_output_dir} --output_format=webdataset --input_format=csv --url_col=url")
 
 # https://github./rom1504/clip-retrieval
@@ -193,4 +220,57 @@ if not os.path.exists(root_emb_dir):
 	# Create new tar filesw
 	os.makedirs(root_emb_dir)
 	print(f"Creating embeddings for {tar_path}")
-	os.system(f"clip-retrieval inference --input_dataset={tar_path} --clip_model={clip_model} --enable_wandb=False --enable_text=False --output_folder={root_emb_dir} --input_format=webdataset")
+	os.system(f"clip-retrieval inference --input_dataset={tar_path} --clip_model={clip_model}, --enable_wandb=False --enable_text=False --output_folder={root_emb_dir} --input_format=webdataset")
+	# Create list of pairs with valid images and embeddings
+
+data_parquet_path = os.path.join(session_dir, 'toloka.parquet')
+if not os.path.exists(data_parquet_path):
+	img_meta_df = loadMetadata(wds_output_dir) # ["key"]
+	emb_meta_df = loadMetadata(root_emb_dir) # ["image_path"]
+	def getEmbeddingIndex(image_url):
+		# Find the entry in img_meta_df where "url"	== image_a
+		image_row = img_meta_df[img_meta_df['url'] == image_url]
+		# Check if the url was found
+		if len(image_row) == 0:
+			return None
+		# Check if image_row status is "success"
+		if image_row['status'].values[0] != 'success':
+			return None
+		image_key = image_row['key'].values[0]
+		image_emb_row = emb_meta_df[emb_meta_df['image_path'] == image_key]
+		# Check if the embedding was found
+		if len(image_emb_row) == 0:
+			return None
+		image_emb_index = image_emb_row.index[0]
+		return image_emb_index
+
+	new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
+	from tqdm import tqdm
+	# Find rows in img_meta_df where "status" != "success"
+	failures = img_meta_df[img_meta_df['status'] != 'success']
+	# Remove entries in toloka_df where "INPUT:image_a" or "INPUT:image_b" are in failures
+	before = len(toloka_df)
+	print(f'Before removing failed images, toloka_df has {before} rows')
+	for row in tqdm(failures.iterrows(), total=len(failures)):
+		url = row[1]['url']
+		toloka_df = toloka_df[(toloka_df['INPUT:image_a'] != url) & (toloka_df['INPUT:image_b'] != url)]
+	after = len(toloka_df)
+	print(f'Removed {before - after} rows from toloka_df due to failed images')
+	# Iterate through the Toloka dataset
+	print('Iterating through Toloka dataset')
+	skipped = 0
+	for row in tqdm(toloka_df.iterrows(), total=len(toloka_df)):
+		image_a, image_b, result = row[1]['INPUT:image_a'], row[1]['INPUT:image_b'], row[1]['OUTPUT:result']
+		# Find index in embedding
+		image_a_emb_idx = getEmbeddingIndex(image_a)
+		image_b_emb_idx = getEmbeddingIndex(image_b)
+		# Check if the url was found
+		if image_a_emb_idx is None or image_b_emb_idx is None:
+			skipped += 1
+			break
+		# Add to new_df us pd.concat
+		new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
+
+	print(f'Skipped {skipped} rows, {len(new_df)} rows left')
+	# Save new_df as parquet
+	new_df.to_parquet(os.path.join(session_dir, 'toloka.parquet'))

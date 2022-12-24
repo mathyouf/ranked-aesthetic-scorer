@@ -105,9 +105,10 @@ class ImagePredictionLogger(pl.Callback):
         })
 
 # Folder which aggregates the results from running clip-retrieval on 1 or more datasets
-embed_folder = "/home/matt/Desktop/Dataset-Creation-Curration/aesthetics/data/outputs/toloka/embeddings"
+tsv_embed_folders = ["./data/outputs/toloka/"]
+roots = {"reddit": None, "tsv": tsv_embed_folders}
 # Rank Dataset
-dataset = RankDataModule(root=embed_folder, batch_size=8)
+dataset = RankDataModule(roots=roots, batch_size=8)
 dataset.prepare_data()
 dataset.setup()
 samples = next(iter(dataset.val_dataloader()))
@@ -115,7 +116,7 @@ embedding_size = samples['emb1'].shape[-1]
 # Aesthetic Model
 model = AestheticScoreMLP(embedding_size)
 # Weights from improved-aesthetic-scorer
-s = torch.load("/home/matt/Desktop/Dataset-Creation-Curration/aesthetics/data/model_weights/sac+logos+ava1-l14-linearMSE.pth")
+s = torch.load("./model_weights/sac+logos+ava1-l14-linearMSE.pth")
 model.load_state_dict(s, strict=False)
 # Trainer for model + dataset
 trainer = pl.Trainer(
