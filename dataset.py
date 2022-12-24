@@ -15,15 +15,23 @@ class PairRankPoolDataset(Dataset):
         # Load embeddings and scores for each root
         self.embeddings = self.loadEmbeddings(root)
         self.metadata = self.loadMetadata(root)
+        print(f"Loaded {len(self.embeddings)} embeddings")
 
-def loadEmbeddings(self, root):
-        embedding_np = os.path.join(root, 'img_emb/img_emb_0.npy')
-        if not os.path.exists(embedding_np):
+    def loadEmbeddings(self, root):
+            embedding_np = os.path.join(root, 'img_emb/img_emb_0.npy')
+            if not os.path.exists(embedding_np):
+                return None
+            x = np.load(embedding_np)
+            # Convert to torch tensor
+            x = torch.tensor(x, dtype=torch.float32)
+            return x
+
+    def loadMetadata(self, root):
+        metadata_parquet = os.path.join(root, 'metadata/metadata_0.parquet')
+        if not os.path.exists(metadata_parquet):
             return None
-        x = np.load(embedding_np)
-        # Convert to torch tensor
-        x = torch.tensor(x, dtype=torch.float32)
-        return x
+        y = pd.read_parquet(metadata_parquet)
+        return y
 
     def __getitem__(self, index):
         return self.data[index]

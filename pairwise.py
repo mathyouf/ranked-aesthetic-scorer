@@ -21,8 +21,72 @@ class AestheticScoreMLP(pl.LightningModule):
         self.ycol = ycol
         self.layers = nn.Sequential(
             nn.Linear(self.input_size, 1024),
-            # Add ReLU?Oski x Dunk High SB 'Great White Shark'
+            # Add ReLU?
+            #nn.ReLU(),
+            nn.Dropout(0.2), 
+            nn.Linear(1024, 128),
+            #nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(128, 64),
+            #nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(64, 16),
+            #nn.ReLU(),
+            nn.Linear(16, 1)
+        )
+        # Create final layer from 0-1
+        self.final_layer = nn.Sequential(
+            # Sigmoid shifted to pivot at the value 5
+            nn.Linear(2, 1),
+        )
 
+    def forward(self, emb1, emb2):
+        x1 = self.layers(emb1)
+        x2 = self.layers(emb2)
+        x = torch.cat((x1, x2), dim=1)
+        x = self.final_layer(x)
+        return x
+
+    def training_step(self, batch, batch_idx):
+        x1 = batch[self.x1col]
+        x2 = batch[self.x2col]
+        y = batch[self.ycol].reshape(-1, 1)
+        x_hat = self.forward(x1, x2)
+        loss = F.mse_loss(x_hat, y)
+        self.log('train/loss', loss, on_epoch=True)
+        # Try BCELoss
+        # loss = F.binary_cross_entropy(x_hat, y)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        x1 = batch[self.x1col]
+        x2 = batch[self.x2col]
+        y = batch[self.ycol].reshape(-1, 1)
+        x_hat = self.forward(x1, x2)
+        loss = F.mse_loss(x_hat, y)
+        self.log("valid/loss_epoch", loss)
+        return loss
+        
+    def configure_optimizers(self):
+        optimizer = Adam(self.parameters(), lr=1e-3)
+        return optimizer
+
+class ImagePredictionLogger(pl.Callback):
+    def __init__(self, val_samples, num_samples=8):
+        super().__init__()
+        self.val_samples = val_samples
+        print(self.val_samples)
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        emb1, emb2, label = self.val_samples['emb1'], self.val_samples['emb2'], self.val_samples['label']
+        url1, url2 = self.val_samples['url1'], self.val_samples['url2']
+        # Download images from urls reisze to 128x128
+        imgs1 = [Image.open(requests.get(url, stream=True).raw).resize(size=(128, 128)) for url in url1]
+        imgs2 = [Image.open(requests.get(url, stream=True).raw).resize(size=(128, 128)) for url in url2]
+        caption1, caption2 = self.val_samples['caption1'], self.val_samples['caption2']
+        # To device
+        emb1 = emb1.to(pl_module.device)
+        emb2 = emb2.to(pl_module.device)
         rank = pl_module(emb1, emb2)
         # Log the images - download url
          # Get image pairs and ranks
