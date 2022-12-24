@@ -1,0 +1,10 @@
+# WebDataset (from Img2Dataset)
+**/*.tar
+data/outputs/toloka/wds
+data/outputs/toloka
+
+# Reddit Scrape
+data/inputs/reddit
+
+# Other
+**/*pycache*
