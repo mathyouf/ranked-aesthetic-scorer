@@ -6,5 +6,8 @@ data/outputs/toloka
 # Reddit Scrape
 data/inputs/reddit
 
+# Weights and Biases
+wandb
+
 # Other
 **/*pycache*

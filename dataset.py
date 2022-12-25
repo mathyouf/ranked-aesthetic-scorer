@@ -16,6 +16,8 @@ class PairRankPoolDataset(Dataset):
         # Load embeddings and scores for each root
         self.embeddings = self.loadEmbeddings(root)
         self.pair_metadata = self.loadPairMetadata(root)
+        self.emb_metadata = self.loadMetadata(os.path.join(root, 'embeddings'))
+        self.url_metadata = self.loadMetadata(os.path.join(root, 'wds'))
         print(f"Loaded {len(self.embeddings)} embeddings and {len(self.pair_metadata)} pairs")
         self.valid = True if self.embeddings is not None and self.pair_metadata is not None else False
 
@@ -35,14 +37,39 @@ class PairRankPoolDataset(Dataset):
         y = pd.read_parquet(metadata_parquet)
         return y
 
+    def loadMetadata(self, dir):
+        # Load all the parquet files in the dir and pd.concat them
+        df = None
+        # Get all files in a directory recursively
+        for (dirpath, dirnames, filenames) in os.walk(dir):
+            for file in filenames:
+                if file.endswith('.parquet'):
+                    # Load parquet file
+                    parquet_path = os.path.join(dirpath, file)
+                    parquet_df = pd.read_parquet(parquet_path)
+                    # Add to df
+                    if df is None:
+                        df = parquet_df
+                    else:
+                        df = pd.concat([df, parquet_df])
+        return df
+
     def __getitem__(self, index):
         # Get random value
         index = np.random.randint(0, len(self.pair_metadata))
         # Get the pair
         pair = self.pair_metadata.iloc[index]
+        index_a = pair['image_a_idx']
+        index_b = pair['image_b_idx']
         # Get the embeddings
-        x1 = self.embeddings[pair['image_a_idx']]
-        x2 = self.embeddings[pair['image_b_idx']]
+        x1 = self.embeddings[index_a]
+        x2 = self.embeddings[index_b]
+        # image_paths
+        image_path_a = self.emb_metadata.iloc[index_a]['image_path']
+        image_path_b = self.emb_metadata.iloc[index_b]['image_path']
+        # Get the urls where self.url_metadata "key" matches  self.emb_metadata "image_path"
+        url1 = self.url_metadata[self.url_metadata['key'] == image_path_a]['url'].values[0]
+        url2 = self.url_metadata[self.url_metadata['key'] == image_path_b]['url'].values[0]
         # Get the label
         result = pair['result']
         label = 1 if result == 'image_a' else 0 if result == 'image_b' else 'error in label'
@@ -50,7 +77,7 @@ class PairRankPoolDataset(Dataset):
             raise ValueError("Error in label")
         # Convert label to tensor
         label = torch.tensor(label, dtype=torch.float32)
-        return {'emb1': x1, 'emb2': x2, 'label': label}
+        return {'emb1': x1, 'emb2': x2, 'label': label, 'url1': url1, 'url2': url2, 'caption1': 'toloka_a', 'caption2': 'toloka_b'}
 
     def __len__(self):
         return len(self.pair_metadata)
