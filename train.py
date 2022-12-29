@@ -8,7 +8,7 @@ from PIL import Image
 import requests
 from datetime import datetime
 from dataset import RankDataModule
-from pairwise import AestheticScoreMLP1
+from pairwise import AestheticScoreMLP0
 
 class ImagePredictionLogger(pl.Callback):
     def __init__(self, val_samples, num_samples=8):
@@ -65,7 +65,7 @@ dataset.setup()
 samples = next(iter(dataset.val_dataloader()))
 embedding_size = samples['emb1'].shape[-1]
 # Aesthetic Model
-model = AestheticScoreMLP1(embedding_size)
+model = AestheticScoreMLP0(embedding_size)
 # Weights from improved-aesthetic-scorer
 s = torch.load("./model_weights/sac+logos+ava1-l14-linearMSE.pth")
 model.load_state_dict(s, strict=False)

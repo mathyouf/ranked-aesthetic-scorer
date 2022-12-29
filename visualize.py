@@ -28,68 +28,7 @@ import clip
 from PIL import Image, ImageFile
 
 
-# if you changed the MLP architecture during training, change it also here:
-from torch.optim import Adam, SGD, AdamW, RMSprop
-import torch.nn.functional as F
-class AestheticScoreMLP(pl.LightningModule):
-    def __init__(self, input_size, x1col='emb1', x2col='emb2', ycol='label'):
-        super().__init__()
-        self.input_size = input_size
-        self.x1col = x1col
-        self.x2col = x2col
-        self.ycol = ycol
-        self.layers = nn.Sequential(
-            nn.Linear(self.input_size, 1024),
-            # Add ReLU?
-            #nn.ReLU(),
-            nn.Dropout(0.2), 
-            nn.Linear(1024, 128),
-            #nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(128, 64),
-            #nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(64, 16),
-            #nn.ReLU(),
-            nn.Linear(16, 1)
-        )
-        # Create final layer from 0-1
-        self.final_layer = nn.Sequential(
-            # Sigmoid shifted to pivot at the value 5
-            nn.Linear(2, 1),
-        )
-
-    def forward(self, emb1, emb2):
-        x1 = self.layers(emb1)
-        x2 = self.layers(emb2)
-        x = torch.cat((x1, x2), dim=1)
-        # Apply final layer
-        x = self.final_layer(x)
-        return x
-
-    def training_step(self, batch, batch_idx):
-        x1 = batch[self.x1col]
-        x2 = batch[self.x2col]
-        y = batch[self.ycol].reshape(-1, 1)
-        x_hat = self.forward(x1, x2)
-        loss = F.mse_loss(x_hat, y)
-        self.log('train/loss', loss, on_epoch=True)
-        # Try BCELoss
-        # loss = F.binary_cross_entropy(x_hat, y)
-        return loss
-    
-    def validation_step(self, batch, batch_idx):
-        x1 = batch[self.x1col]
-        x2 = batch[self.x2col]
-        y = batch[self.ycol].reshape(-1, 1)
-        x_hat = self.forward(x1, x2)
-        loss = F.mse_loss(x_hat, y)
-        self.log("valid/loss_epoch", loss)
-        return loss
-        
-    def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=1e-3)
-        return optimizer
+from pairwise import AestheticScoreMLP0
 
 def normalized(a, axis=-1, order=2):
     import numpy as np  # pylint: disable=import-outside-toplevel
@@ -99,7 +38,7 @@ def normalized(a, axis=-1, order=2):
     return a / np.expand_dims(l2, axis)
 
 
-model = AestheticScoreMLP(768)  # CLIP embedding dim is 768 for CLIP ViT L 14
+model = AestheticScoreMLP0(768)  # CLIP embedding dim is 768 for CLIP ViT L 14
 
 s = torch.load("model_weights/2022-12-28_23-57-18.pth")   # load the model you trained previously or the model available in this repo
 
@@ -113,8 +52,6 @@ model.eval()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model2, preprocess = clip.load("ViT-L/14", device=device)  #RN50x64   
 
-
-
 c=0
 urls= []
 predictions=[]
@@ -122,39 +59,42 @@ predictions=[]
 # this will run inference over 10 webdataset tar files from LAION 400M and sort them into 20 categories
 # you can DL LAION 400M and convert it to wds tar files with img2dataset ( https://github.com/rom1504/img2dataset ) 
 
+from datasets import load_dataset
+file = "./part-00000-5b54c5d5-bbcf-484d-a2ce-0d6f73df1a36-c000.snappy.parquet"
+dataset = load_dataset("laion/laion400m", data_files=file, cache_dir="./cache")
 
-for j in range(10):
-   if j<10:
-     # change the path to the tar files accordingly
-     dataset = wds.WebDataset("pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/0000"+str(j)+".tar -")  #"pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/00625.tar -")
-   else:
-     dataset = wds.WebDataset("pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/000"+str(j)+".tar -")  #"pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/00625.tar -")
+# for j in range(10):
+#    if j<10:
+#      # change the path to the tar files accordingly
+#      dataset = wds.WebDataset("pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/0000"+str(j)+".tar -")  #"pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/00625.tar -")
+#    else:
+#      dataset = wds.WebDataset("pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/000"+str(j)+".tar -")  #"pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/00625.tar -")
 
-   for i, d in enumerate(dataset):
-      print(c)
+#    for i, d in enumerate(dataset):
+#       print(c)
 
-      metadata= json.loads(d['json'])       
+#       metadata= json.loads(d['json'])       
 
-      pil_image = Image.open(io.BytesIO(d['jpg']))
-      c=c+1
-      try:
-         image = preprocess(pil_image).unsqueeze(0).to(device)
+#       pil_image = Image.open(io.BytesIO(d['jpg']))
+#       c=c+1
+#       try:
+#          image = preprocess(pil_image).unsqueeze(0).to(device)
 
-      except:
-         continue
+#       except:
+#          continue
 
-      with torch.no_grad():
-         image_features = model2.encode_image(image)
-
-
-      im_emb_arr = normalized(image_features.cpu().detach().numpy() )
-
-      prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
-      urls.append(metadata["url"])
-      predictions.append(prediction)
+#       with torch.no_grad():
+#          image_features = model2.encode_image(image)
 
 
-df = pd.DataFrame(list(zip(urls, predictions)),
+#       im_emb_arr = normalized(image_features.cpu().detach().numpy() )
+
+#       prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
+#       urls.append(metadata["url"])
+#       predictions.append(prediction)
+
+
+dradrdf = pd.DataFrame(list(zip(urls, predictions)),
                columns =['filepath', 'prediction'])
 
 
