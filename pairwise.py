@@ -11,6 +11,7 @@ import wandb
 from PIL import Image
 from dataset import RankDataModule
 import requests
+from datetime import datetime
 
 class AestheticScoreMLP(pl.LightningModule):
     def __init__(self, input_size, x1col='emb1', x2col='emb2', ycol='label'):
@@ -34,36 +35,39 @@ class AestheticScoreMLP(pl.LightningModule):
             #nn.ReLU(),
             nn.Linear(16, 1)
         )
-        # Create final layer from 0-1
-        self.final_layer = nn.Sequential(
-            # Sigmoid shifted to pivot at the value 5
-            nn.Linear(2, 1),
-        )
 
     def forward(self, emb1, emb2):
         x1 = self.layers(emb1)
         x2 = self.layers(emb2)
         x = torch.cat((x1, x2), dim=1)
-        x = self.final_layer(x)
+        x = x / 10
+        # clamp to 0-1
+        x = torch.clamp(x, 0, 1)
+        # Convert distribution to 0-inf using -log(1-x)
+        x = -torch.log(1 - x)
+        # Apply softmax 
+        x = torch.softmax(x, dim=1)
         return x
 
     def training_step(self, batch, batch_idx):
         x1 = batch[self.x1col]
         x2 = batch[self.x2col]
         y = batch[self.ycol].reshape(-1, 1)
+        # Convert y (8, 1) to y_vec (8, 2) where y_vec[:, 0] = y and y_vec[:, 1] = 1 - y
+        y_vec = torch.cat((y, 1 - y), dim=1)
         x_hat = self.forward(x1, x2)
-        loss = F.mse_loss(x_hat, y)
+        loss = F.binary_cross_entropy(x_hat, y_vec)
         self.log('train/loss', loss, on_epoch=True)
-        # Try BCELoss
-        # loss = F.binary_cross_entropy(x_hat, y)
         return loss
-    
+
     def validation_step(self, batch, batch_idx):
         x1 = batch[self.x1col]
         x2 = batch[self.x2col]
         y = batch[self.ycol].reshape(-1, 1)
+        # Convert y (8, 1) to y_vec (8, 2) where y_vec[:, 0] = y and y_vec[:, 1] = 1 - y
+        y_vec = torch.cat((y, 1 - y), dim=1)
         x_hat = self.forward(x1, x2)
-        loss = F.mse_loss(x_hat, y)
+        loss = F.binary_cross_entropy(x_hat, y_vec)
         self.log("valid/loss_epoch", loss)
         return loss
         
@@ -123,8 +127,11 @@ trainer = pl.Trainer(
     logger=WandbLogger(project="aesthetic-rankings"),    # W&B integration
     log_every_n_steps=50,   # set the logging frequency
     gpus=[3],               # Select GPUs
-    max_epochs=10000,      # number of epochs
+    max_epochs=100,      # number of epochs
     deterministic=True,     # keep it deterministic
     callbacks=[ImagePredictionLogger(samples)]
 )
 trainer.fit(model, dataset)
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+save_path = f"./model_weights/{timestamp}.pth"
+torch.save(model.state_dict(), save_path)
