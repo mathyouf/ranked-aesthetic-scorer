@@ -64,6 +64,8 @@ from datasets import load_dataset
 file = "./part-00000-5b54c5d5-bbcf-484d-a2ce-0d6f73df1a36-c000.snappy.parquet"
 dataset = load_dataset("laion/laion400m", data_files=file, cache_dir="./cache")
 
+# Could use https://huggingface.co/datasets/dclure/laion-aesthetics-12m-umap
+
 # for j in range(10):
 #    if j<10:
 #      # change the path to the tar files accordingly
@@ -73,7 +75,9 @@ dataset = load_dataset("laion/laion400m", data_files=file, cache_dir="./cache")
 
 import requests
 # iterate over huggingface dataset
-total = 100
+total = 1000
+hiplot_data_format = []
+hiplot_df = pd.DataFrame()
 for d in tqdm.tqdm(dataset['train'], total=total):
     if c<total:
         url = d["URL"]
@@ -93,9 +97,28 @@ for d in tqdm.tqdm(dataset['train'], total=total):
         im_emb_arr = normalized(image_features.cpu().detach().numpy() )
 
         prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
+
+        # Map each value in im_emb_arr to a key in hiplot_data_entry
+        aesthetic_score = str(round(prediction.cpu().detach().numpy()[0][0], 2))
+        hiplot_data_entry = {"prediction": aesthetic_score}
+        for i in range(30):
+            hiplot_data_entry["embedding_"+str(i)] = str(im_emb_arr[0][i])
+        hiplot_data_entry["url"] = url
+        hiplot_data_format.append(hiplot_data_entry)
+
         urls.append(url)
         predictions.append(prediction)
+    else:
+        break
 
+import hiplot as hip
+aes = pd.DataFrame(hiplot_data_format)
+aes_hiplot = hip.Experiment.from_dataframe(aes)
+_ = aes_hiplot.to_html("sites/aes_hiplot.html")
+
+# Save hiplot data format to json file
+with open('hiplot_data_format.json', 'w') as f:
+    json.dump(hiplot_data_format, f)
 
 df = pd.DataFrame(list(zip(urls, predictions)), columns=['filepath', 'prediction'])
 
@@ -123,7 +146,7 @@ for [a,b] in tqdm.tqdm(buckets):
     html+="</div>"
     i+=1
     print(i)
-html_name = weights_path.split("/")[-1].split(".")[0]+".html"
+html_name = "sites/" + weights_path.split("/")[-1].split(".")[0]+".html"
 with open(html_name, "w") as f:
     f.write(html)
     

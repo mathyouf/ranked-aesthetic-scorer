@@ -1,0 +1,48 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Python: Current File",
+			"type": "python",
+			"request": "launch",
+			"program": "${file}",
+			"console": "integratedTerminal",
+			"justMyCode": true
+		},
+		{
+            "name": "aes-toloka-prep",
+            "type": "python",
+            "request": "launch",
+            "program": "data/processToloka.py",
+            "cwd": "/home/matt/Desktop/ranked-aesthetic-scorer",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "aes-toloka-prep2",
+            "type": "python",
+            "request": "launch",
+            "program": "data/processToloka2.py",
+            "cwd": "/home/matt/Desktop/ranked-aesthetic-scorer",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "aesthetics-inference",
+            "type": "python",
+            "request": "launch",
+            "program": "train.py",
+            "cwd": "/home/matt/Desktop/ranked-aesthetic-scorer",
+            "console": "integratedTerminal",
+        },
+		{
+            "name": "aesthetics-visual",
+            "type": "python",
+            "request": "launch",
+            "program": "visualize.py",
+            "cwd": "/home/matt/Desktop/ranked-aesthetic-scorer",
+            "console": "integratedTerminal",
+        },
+	]
+}

@@ -11,3 +11,10 @@ wandb
 
 # Other
 **/*pycache*
+
+!data/outputs/toloka/top_10_percent.html
+
+aesthetic-rankings
+
+# For caching datasets
+cache
