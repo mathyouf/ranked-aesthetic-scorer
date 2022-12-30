@@ -28,7 +28,7 @@ import clip
 from PIL import Image, ImageFile
 
 
-from pairwise import AestheticScoreMLP0
+from pairwise import MLPOriginal
 
 def normalized(a, axis=-1, order=2):
     import numpy as np  # pylint: disable=import-outside-toplevel
@@ -38,11 +38,11 @@ def normalized(a, axis=-1, order=2):
     return a / np.expand_dims(l2, axis)
 
 
-model = AestheticScoreMLP0(768)  # CLIP embedding dim is 768 for CLIP ViT L 14
+model = MLPOriginal(768)  # CLIP embedding dim is 768 for CLIP ViT L 14
 
-s = torch.load("model_weights/2022-12-28_23-57-18.pth")   # load the model you trained previously or the model available in this repo
-
-model.load_state_dict(s)
+weights_path = "model_weights/ava+logos-l14-linearMSE.pth"
+s = torch.load(weights_path)   # load the model you trained previously or the model available in this repo
+model.load_state_dict(s, strict=False)
 
 
 model.to("cuda")
@@ -60,6 +60,7 @@ predictions=[]
 # you can DL LAION 400M and convert it to wds tar files with img2dataset ( https://github.com/rom1504/img2dataset ) 
 
 from datasets import load_dataset
+# Load from: https://huggingface.co/datasets/laion/laion400m
 file = "./part-00000-5b54c5d5-bbcf-484d-a2ce-0d6f73df1a36-c000.snappy.parquet"
 dataset = load_dataset("laion/laion400m", data_files=file, cache_dir="./cache")
 
@@ -70,32 +71,33 @@ dataset = load_dataset("laion/laion400m", data_files=file, cache_dir="./cache")
 #    else:
 #      dataset = wds.WebDataset("pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/000"+str(j)+".tar -")  #"pipe:aws s3 cp s3://s-datasets/laion400m/laion400m-dat-release/00625.tar -")
 
-#    for i, d in enumerate(dataset):
-#       print(c)
+import requests
+# iterate over huggingface dataset
+total = 100
+for d in tqdm.tqdm(dataset['train'], total=total):
+    if c<total:
+        url = d["URL"]
+        try:
+            pil_image = Image.open(requests.get(url, stream=True, timeout=1).raw)
+        except:
+            print("Error downloading image")
+            continue
+        c=c+1
+        try:
+            image = preprocess(pil_image).unsqueeze(0).to(device)
+        except:
+            continue
+        with torch.no_grad():
+            image_features = model2.encode_image(image)
 
-#       metadata= json.loads(d['json'])       
+        im_emb_arr = normalized(image_features.cpu().detach().numpy() )
 
-#       pil_image = Image.open(io.BytesIO(d['jpg']))
-#       c=c+1
-#       try:
-#          image = preprocess(pil_image).unsqueeze(0).to(device)
-
-#       except:
-#          continue
-
-#       with torch.no_grad():
-#          image_features = model2.encode_image(image)
+        prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
+        urls.append(url)
+        predictions.append(prediction)
 
 
-#       im_emb_arr = normalized(image_features.cpu().detach().numpy() )
-
-#       prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
-#       urls.append(metadata["url"])
-#       predictions.append(prediction)
-
-
-dradrdf = pd.DataFrame(list(zip(urls, predictions)),
-               columns =['filepath', 'prediction'])
+df = pd.DataFrame(list(zip(urls, predictions)), columns=['filepath', 'prediction'])
 
 
 buckets = [(i, i+1) for i in range(20)]
@@ -104,7 +106,7 @@ buckets = [(i, i+1) for i in range(20)]
 html= "<h1>Aesthetic subsets in LAION 100k samples</h1>"
 
 i =0
-for [a,b] in buckets:
+for [a,b] in tqdm.tqdm(buckets):
     a = a/2
     b = b/2
     total_part = df[(  (df["prediction"] ) *1>= a) & (  (df["prediction"] ) *1 <= b)]
@@ -118,10 +120,10 @@ for [a,b] in buckets:
     for filepath in part["filepath"]:
         html+='<img src="'+filepath +'" height="200" />'
 
-
     html+="</div>"
     i+=1
     print(i)
-with open("./aesthetic_viz_laion_ava+logos_L14_100k-linearMSE.html", "w") as f:
+html_name = weights_path.split("/")[-1].split(".")[0]+".html"
+with open(html_name, "w") as f:
     f.write(html)
     
