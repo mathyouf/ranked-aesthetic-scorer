@@ -98,8 +98,12 @@ for d in tqdm.tqdm(dataset['train'], total=total):
 
         prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
 
+        prediction = round(prediction.cpu().detach().numpy()[0][0], 2)
+
+        # Add new row to hiplot dataframe
+        hiplot_df = pd.concat([hiplot_df, pd.DataFrame({"prediction": [prediction], "url": [url], "embedding": [im_emb_arr]})])
         # Map each value in im_emb_arr to a key in hiplot_data_entry
-        aesthetic_score = str(round(prediction.cpu().detach().numpy()[0][0], 2))
+        aesthetic_score = str(prediction)
         hiplot_data_entry = {"prediction": aesthetic_score}
         for i in range(30):
             hiplot_data_entry["embedding_"+str(i)] = str(im_emb_arr[0][i])
@@ -110,6 +114,11 @@ for d in tqdm.tqdm(dataset['train'], total=total):
         predictions.append(prediction)
     else:
         break
+
+# UMAP the embeddings
+import umap
+umap_path = "umap_embeddings.npy"
+
 
 import hiplot as hip
 aes = pd.DataFrame(hiplot_data_format)
