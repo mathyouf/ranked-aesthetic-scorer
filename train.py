@@ -25,16 +25,16 @@ class ImagePredictionLogger(pl.Callback):
         imgs2 = []
         for url in url1:
             try:
-                imgs1.append(Image.open(requests.get(url, stream=True).raw).resize((128, 128)))
+                imgs1.append(Image.open(requests.get(url, stream=True).raw).resize((256, 256)))
             except:
                 print("Error downloading image")
-                imgs1.append(Image.new('RGB', (128, 128)))
+                imgs1.append(Image.new('RGB', (256, 256)))
         for url in url2:
             try:
-                imgs2.append(Image.open(requests.get(url, stream=True).raw).resize((128, 128)))
+                imgs2.append(Image.open(requests.get(url, stream=True).raw).resize((256, 256)))
             except:
                 print("Error downloading image")
-                imgs2.append(Image.new('RGB', (128, 128)))
+                imgs2.append(Image.new('RGB', (256, 256)))
         caption1, caption2 = self.val_samples['caption1'], self.val_samples['caption2']
         # To device
         emb1 = emb1.to(pl_module.device)

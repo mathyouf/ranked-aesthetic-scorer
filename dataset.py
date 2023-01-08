@@ -31,10 +31,10 @@ class PairRankPoolDataset(Dataset):
         return x
 
     def loadPairMetadata(self, root):
-        metadata_parquet = os.path.join(root, 'toloka.parquet')
-        if not os.path.exists(metadata_parquet):
+        agreement_csv = os.path.join(root, 'agreement_results.csv')
+        if not os.path.exists(agreement_csv):
             return None
-        y = pd.read_parquet(metadata_parquet)
+        y = pd.read_csv(agreement_csv)
         return y
 
     def loadMetadata(self, dir):
