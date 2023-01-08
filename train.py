@@ -57,9 +57,9 @@ class ImagePredictionLogger(pl.Callback):
         for i in range(len(imgs1)):
             img1 = wandb.Image(imgs1[i], caption=caption1[i])
             img2 = wandb.Image(imgs2[i], caption=caption2[i])
-            y = y[i].detach().cpu().item()
+            y = y.detach().cpu().item()
             # Convert to int
-            y_hat = y_hat[i].detach().cpu().item()
+            y_hat = y_hat.detach().cpu().item()
             table.add_data(img1, img2, y, y_hat)
 
         # Log the table
