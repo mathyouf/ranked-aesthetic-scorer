@@ -26,18 +26,12 @@ class MLPOriginal(pl.LightningModule):
         self.ycol = ycol
         self.layers = nn.Sequential(
             nn.Linear(self.input_size, 1024),
-            #nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(1024, 128),
-            #nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(128, 64),
-            #nn.ReLU(),
             nn.Dropout(0.1),
-
             nn.Linear(64, 16),
-            #nn.ReLU(),
-
             nn.Linear(16, 1)
         )
 
@@ -71,47 +65,49 @@ class AestheticScoreMLP0(pl.LightningModule):
         self.ycol = ycol
         self.layers = nn.Sequential(
             nn.Linear(self.input_size, 1024),
-            # Add ReLU?
-            #nn.ReLU(),
             nn.Dropout(0.2), 
             nn.Linear(1024, 128),
-            #nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(128, 64),
-            #nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(64, 16),
-            #nn.ReLU(),
             nn.Linear(16, 1)
         )
-        # Create final layer from 0-1
-        self.final_layer = nn.Sequential(
-            # Sigmoid shifted to pivot at the value 5
-            nn.Linear(2, 1),
-        )
 
-    def forward(self, emb1, emb2):
-        x1 = self.layers(emb1)
-        x2 = self.layers(emb2)
-        x = torch.cat((x1, x2), dim=1)
-        # Sutract 5
-        x = x - 5
-        # Apply sigmoid
-        x = torch.sigmoid(x)
-        # Apply final layer
-        x = self.final_layer(x)
+    def forward(self, emb):
+        x = self.layers(emb)
         return x
 
     def training_step(self, batch, batch_idx):
+        # Get x values
         x1 = batch[self.x1col]
         x2 = batch[self.x2col]
-        y = batch[self.ycol].reshape(-1, 1)
-        x_hat = self.forward(x1, x2)
-        loss = F.mse_loss(x_hat, y)
+
+        # Get unnormalized aesthetic scores
+        s1 = self(x1)
+        s2 = self(x2)
+        delta_s = s1 - s2
+
+        # Get y values
+        y_hat = torch.sigmoid(delta_s) # probability of x1 preferred x2  0.0-1.0
+        y = batch[self.ycol].reshape(-1, 1) # observed probability
+
+        # Calculate loss
+        loss = F.binary_cross_entropy(y_hat, y)
         self.log('train/loss', loss, on_epoch=True)
         return loss
-    
+
+    #TODO
+    def predict(self, x):
+        unnormalized_score = self(x)
+        # apply CDF normalization (sklearn empirical cumulative distribution function - could do in numpy) to get values 0-1
+        # maybe use numpy - normalized histogra (np.historgram)
+        score = False
+        assert score
+        return score
+
     def validation_step(self, batch, batch_idx):
+        # rewrite to match train
         x1 = batch[self.x1col]
         x2 = batch[self.x2col]
         y = batch[self.ycol].reshape(-1, 1)
@@ -123,6 +119,20 @@ class AestheticScoreMLP0(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), lr=1e-3)
         return optimizer
+
+#TODO: test this yo! thx charles
+import numpy as np
+def make_cdf(model, embs):    
+    unnormalized_scores = model(embs)
+    counts, edges = np.histogram(unnormalized_scores)  # check this is normalized to sum to 1
+    probs = counts / np.sum(counts)
+    ecdf = np.cumsum(probs)
+
+    def run_cdf(unnormalized_score):
+        change_point =  np.diff(np.int(unnormalized_score < edges))
+        return np.dot(ecdf, change_point)
+
+    return run_cdf
 
 class AestheticScoreMLP1(pl.LightningModule):
     def __init__(self, input_size, x1col='emb1', x2col='emb2', ycol='label'):

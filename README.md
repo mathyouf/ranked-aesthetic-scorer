@@ -6,6 +6,13 @@ A changed version of the [LAION Aesthetics](https://laion.ai/blog//) model calle
 ### Toloka
 Idea: Use [inter-rater reliability coefficient](https://en.wikipedia.org/wiki/Inter-rater_reliability) as a metric to be directly guessed by the model
 
+> Reliable raters agree with the "official" rating of a performance.
+> Reliable raters agree with each other about the exact ratings to be awarded.
+> Reliable raters agree about which performance is better and which is worse.
+
+> Reliable raters behave like independent witnesses. They demonstrate their independence by disagreeing slightly. This behavior can be evaluated by the Rasch model.
+
+
 ### Reddit
 Idea: Compare posts which were posted within an hour of each other in the time of day
 

@@ -58,17 +58,11 @@ def getWorkerInfo(df):
 	workers = sorted(workers, key=lambda worker: worker['incorrect_percent'], reverse=True)
 	return workers, incorrect
 
-def workers_to_remove_info(workers, df):
-	# 
-
 def filterBadWorkers(df):
 	workers, incorrect = getWorkerInfo(df)
 	# Filter out workers with more than 20% incorrect golden outputs
 	workers_to_remove = [worker['worker_id'] for worker in workers if worker['incorrect_percent'] > 20]
 	workers_to_keep = [worker for worker in workers if worker['worker_id'] not in workers_to_remove]
-	
-	workers_to_remove_info(workers, df)
-
 	before = len(df)
 	df = df[~df['ASSIGNMENT:worker_id'].isin(workers_to_remove)]
 	print('Removed ', len(workers_to_remove), ' workers and ', before - len(df), ' rows')
@@ -181,7 +175,7 @@ def uniqueComparisons(df, unique_urls):
 	# Return unique_urls
 	return unique_urls
 
-def saveAsCSV(df):
+def getUniqueURLS(df):
 	# Create new dataframe with a url column
 	img_a_df = pd.DataFrame(columns=['url'])
 	img_a_df['url'] = df['INPUT:image_a']
@@ -193,12 +187,7 @@ def saveAsCSV(df):
 	# Get unique url count
 	unique_urls = wds_df.drop_duplicates().reset_index()
 	print(f'Unique urls: {len(unique_urls)}')
-	# Get the comparrisons for each unique url
-	# uniquedf = uniqueComparisons(df, unique_urls)
-	# Save as csv
-	csv_name = os.path.join(session_dir, 'wds.csv')
-	unique_urls.to_csv(csv_name, index=False)
-	return csv_name
+	return unique_urls
 
 def dfToHTML(df, session_dir, html_name='low_agreement.html'):
 	# Convert index entries to img_a and img_b
@@ -242,15 +231,20 @@ def findDisagreements(df):
 	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement')
 
 import pandas as pd
-def loadTSV(root):
-	# Load .tsv file
+def tsvTocsv(root, csv_name='wds.csv'):
 	df = pd.read_csv(root, sep='\t')
-	df = filterBadAssignments(df) # ASSIGNMENT:status != APPROVED
-	df = filterBadInputs(df) # OUTPUT:result != INPUT:image_a | INPUT:image_b
-	disagreements = findDisagreements(df)
-	df = filterBadWorkers(df)
-	csv_name = saveAsCSV(df)
-	return csv_name, df
+	unique_urls = getUniqueURLS(df)
+	csv_name = os.path.join(session_dir, csv_name)
+	unique_urls.to_csv(csv_name, index=False)
+	return csv_name
+
+# def filterPairs(parquet_path):
+	# Load parquet file
+	# df = pd.read_parquet(parquet_path)
+	# df = filterBadAssignments(df) # ASSIGNMENT:status != APPROVED
+	# df = filterBadInputs(df) # OUTPUT:result != INPUT:image_a | INPUT:image_b
+	# disagreements = findDisagreements(df)
+	# df = filterBadWorkers(df)
 
 def loadMetadata(dir):
 	# Load all the parquet files in the dir and pd.concat them
@@ -303,6 +297,25 @@ def makeEmbeddings(wds_output_dir, session_dir, sub_folder='embeddings'):
 		# Create list of pairs with valid images and embeddings
 	return root_emb_dir
 
+def createPairDataset():
+	skipped = 0
+	new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
+	for row in tqdm(toloka_df.iterrows(), total=len(toloka_df)):
+		image_a, image_b, result = row[1]['INPUT:image_a'], row[1]['INPUT:image_b'], row[1]['OUTPUT:result']
+		# Find index in embedding
+		image_a_emb_idx = getEmbeddingIndex(image_a)
+		image_b_emb_idx = getEmbeddingIndex(image_b)
+		# Check if the url was found
+		if image_a_emb_idx is None or image_b_emb_idx is None:
+			skipped += 1
+			break
+		# Add to new_df us pd.concat
+		new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
+
+	print(f'Skipped {skipped} rows, {len(new_df)} rows left')
+	# Save new_df as parquet
+	new_df.to_parquet(os.path.join(session_dir, 'toloka.parquet'))
+
 def makePairDataset(toloka_df, session_dir, name='toloka'):
 	data_parquet_path = os.path.join(session_dir, name+'.parquet')
 	if not os.path.exists(data_parquet_path):
@@ -324,8 +337,6 @@ def makePairDataset(toloka_df, session_dir, name='toloka'):
 				return None
 			image_emb_index = image_emb_row.index[0]
 			return image_emb_index
-
-		new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
 		# Find rows in img_meta_df where "status" != "success"
 		failures = img_meta_df[img_meta_df['status'] != 'success']
 		# Remove entries in toloka_df where "INPUT:image_a" or "INPUT:image_b" are in failures
@@ -336,28 +347,16 @@ def makePairDataset(toloka_df, session_dir, name='toloka'):
 			toloka_df = toloka_df[(toloka_df['INPUT:image_a'] != url) & (toloka_df['INPUT:image_b'] != url)]
 		after = len(toloka_df)
 		print(f'Removed {before - after} rows from toloka_df due to failed images')
-		# Iterate through the Toloka dataset
-		print('Iterating through Toloka dataset')
-		skipped = 0
-		for row in tqdm(toloka_df.iterrows(), total=len(toloka_df)):
-			image_a, image_b, result = row[1]['INPUT:image_a'], row[1]['INPUT:image_b'], row[1]['OUTPUT:result']
-			# Find index in embedding
-			image_a_emb_idx = getEmbeddingIndex(image_a)
-			image_b_emb_idx = getEmbeddingIndex(image_b)
-			# Check if the url was found
-			if image_a_emb_idx is None or image_b_emb_idx is None:
-				skipped += 1
-				break
-			# Add to new_df us pd.concat
-			new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
-
-		print(f'Skipped {skipped} rows, {len(new_df)} rows left')
-		# Save new_df as parquet
-		new_df.to_parquet(os.path.join(session_dir, 'toloka.parquet'))
+		# Create pair dataset
+		createPairDataset()
 
 session_dir = prepareFolders()
-csv_name, toloka_df = loadTSV('data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv')
+tsv_path = 'data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv'
+
+# Pipeline to get Embeddings: (762,)
+csv_name = tsvTocsv(tsv_path)
 wds_dir = makeWebDataset(csv_name, session_dir)
 emb_dir = makeEmbeddings(wds_dir, session_dir)
-# Make the parquet which combines the embeddings and the metadata
-parquet_path = makePairDataset(toloka_df, session_dir)
+
+# Pipeline to get Pairs: image_a, image_b, preference (-1.0 to 1.0)
+parquet_path = makePairDataset(session_dir)
