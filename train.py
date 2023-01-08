@@ -43,8 +43,8 @@ class ImagePredictionLogger(pl.Callback):
         x2 = emb2.to(pl_module.device)
 
         # Get unnormalized aesthetic scores
-        s1 = self(x1)
-        s2 = self(x2)
+        s1 = pl_module(x1)
+        s2 = pl_module(x2)
         delta_s = s1 - s2
 
         # Get y values
