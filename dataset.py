@@ -16,8 +16,8 @@ class PairRankPoolDataset(Dataset):
         # Load embeddings and scores for each root
         self.embeddings = self.loadEmbeddings(root)
         self.pair_metadata = self.loadPairMetadata(root)
-        self.emb_metadata = self.loadMetadata(os.path.join(root, 'embeddings'))
-        self.url_metadata = self.loadMetadata(os.path.join(root, 'wds'))
+        # self.emb_metadata = self.loadMetadata(os.path.join(root, 'embeddings'))
+        # self.url_metadata = self.loadMetadata(os.path.join(root, 'wds'))
         print(f"Loaded {len(self.embeddings)} embeddings and {len(self.pair_metadata)} pairs")
         self.valid = True if self.embeddings is not None and self.pair_metadata is not None else False
 
@@ -56,27 +56,23 @@ class PairRankPoolDataset(Dataset):
 
     def __getitem__(self, index):
         # Get random value
-        index = np.random.randint(0, len(self.pair_metadata))
-        # Get the pair
-        pair = self.pair_metadata.iloc[index]
-        index_a = pair['image_a_idx']
-        index_b = pair['image_b_idx']
+        image_a_index = np.random.randint(0, len(self.pair_metadata))
+        # Find the entry in column image_a_emb_idx
+        pair = self.pair_metadata[self.pair_metadata['image_a_emb_idx'] == image_a_index]
+        image_b_index = pair['image_b_emb_idx'].values[0]
         # Get the embeddings
-        x1 = self.embeddings[index_a]
-        x2 = self.embeddings[index_b]
-        # image_paths
-        image_path_a = self.emb_metadata.iloc[index_a]['image_path']
-        image_path_b = self.emb_metadata.iloc[index_b]['image_path']
-        # Get the urls where self.url_metadata "key" matches  self.emb_metadata "image_path"
-        url1 = self.url_metadata[self.url_metadata['key'] == image_path_a]['url'].values[0]
-        url2 = self.url_metadata[self.url_metadata['key'] == image_path_b]['url'].values[0]
+        x1 = self.embeddings[image_a_index]
+        x2 = self.embeddings[image_b_index]
+        # urls from first value in index
+        # ,,image_a,image_b,image_a_emb_idx,image_b_emb_idx,agreement
+        # https://rlv.zcache.co.uk/paris_france_vintage_look_postcard-r55573c3341e14a2f9f1e74dc74d1bea6_vgbaq_8byvr_307.jpg,http://img2.imagesbn.com/p/9780313279775_p0_v2_s260x420.JPG,14,0,1127.0,5291.0,1.0
+        urls = pair[0].values[0].split(',')
+        url1 = urls[0]
+        url2 = urls[1]
         # Get the label
-        result = pair['result']
-        label = 1 if result == 'image_a' else 0 if result == 'image_b' else 'error in label'
-        if label == 'error in label':
-            raise ValueError("Error in label")
+        result = pair['agreement'].values[0]
         # Convert label to tensor
-        label = torch.tensor(label, dtype=torch.float32)
+        label = torch.tensor(result, dtype=torch.float32)
         return {'emb1': x1, 'emb2': x2, 'label': label, 'url1': url1, 'url2': url2, 'caption1': 'toloka_a', 'caption2': 'toloka_b'}
 
     def __len__(self):
