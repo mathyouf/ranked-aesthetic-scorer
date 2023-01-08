@@ -84,9 +84,9 @@ model.load_state_dict(s, strict=False)
 # Trainer for model + dataset
 trainer = pl.Trainer(
     logger=WandbLogger(project="aesthetic-rankings"),    # W&B integration
-    log_every_n_steps=50,   # set the logging frequency
+    log_every_n_steps=250,   # set the logging frequency
     gpus=[3],               # Select GPUs
-    max_epochs=100,      # number of epochs
+    max_epochs=10000,      # number of epochs
     deterministic=True,     # keep it deterministic
     callbacks=[ImagePredictionLogger(samples)]
 )
