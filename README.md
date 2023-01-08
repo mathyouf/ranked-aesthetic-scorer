@@ -1,5 +1,14 @@
 # ranked-aesthetic-scorer
-Created as a change to the improved-aesthetic-scorer that allows for using ranked/pairwise datasets to train the aesthetic scorer
+A changed version of the [LAION Aesthetics](https://laion.ai/blog//) model called the [improved-aesthetic-predictor](https://github.com/christophschuhmann/improved-aesthetic-predictor)
+
+## Data
+
+### Toloka
+
+### Reddit
+[Nature Network](https://www.reddit.com/r/sfwpornnetwork/wiki/network/#wiki_nature)
+`python data/processURS.py`
+
 
 # Sites
 [Disagreement Images >70%](https://mathyouf.github.io/ranked-aesthetic-scorer/sites/top_10_percent.html)

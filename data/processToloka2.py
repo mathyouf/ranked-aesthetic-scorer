@@ -23,7 +23,17 @@ def filterBadInputs(df, filter_col='OUTPUT:result'):
 	df = filterCol(df, col=filter_col, vals=input_names)
 	return df
 
-def filterBadWorkers(df):
+def printIncorrect(workers):
+	count_thresholds = [1, 5, 10, 100, 500, 1000]
+	for i, count_threshold in enumerate(count_thresholds):
+		if i < len(count_thresholds) - 1:
+			number_of_workers = len([worker for worker in workers if worker['count'] >= count_thresholds[i] and worker['count'] < count_thresholds[i+1]])
+			print(f"	between {count_thresholds[i]} and {count_thresholds[i+1]} assignments: {number_of_workers} workers")
+			workers_temp = [worker for worker in workers if worker['count'] >= count_thresholds[i] and worker['count'] < count_thresholds[i+1]]
+			for worker in workers_temp[:10]:
+				print(f"Count: {worker['count']}, Incorrect: {worker['incorrect']}, Percent: {worker['incorrect_percent']}%")
+
+def getWorkerInfo(df):
 	# Get outputs which have a GOLDEN:result value
 	golden = df[df['GOLDEN:result'].notnull()]
 	print('Number of golden outputs:', len(golden))
@@ -46,62 +56,30 @@ def filterBadWorkers(df):
 
 	# Sort workers by incorrect_percent
 	workers = sorted(workers, key=lambda worker: worker['incorrect_percent'], reverse=True)
-	print('Workers with the most incorrect golden outputs:')
-	count_thresholds = [1, 5, 10, 100, 500, 1000]
-	for i, count_threshold in enumerate(count_thresholds):
-		if i < len(count_thresholds) - 1:
-			number_of_workers = len([worker for worker in workers if worker['count'] >= count_thresholds[i] and worker['count'] < count_thresholds[i+1]])
-			print(f"	between {count_thresholds[i]} and {count_thresholds[i+1]} assignments: {number_of_workers} workers")
-			workers_temp = [worker for worker in workers if worker['count'] >= count_thresholds[i] and worker['count'] < count_thresholds[i+1]]
-			for worker in workers_temp[:10]:
-				print(f"Count: {worker['count']}, Incorrect: {worker['incorrect']}, Percent: {worker['incorrect_percent']}%")
-	# Graph data
-	plot_paths = graphData(df, workers, incorrect)
+	return workers, incorrect
+
+def workers_to_remove_info(workers, df):
+	# Get the info on what images the workers got wrong
+	
+
+
+def filterBadWorkers(df):
+	workers, incorrect = getWorkerInfo(df)
 	# Filter out workers with more than 20% incorrect golden outputs
 	workers_to_remove = [worker['worker_id'] for worker in workers if worker['incorrect_percent'] > 20]
-	print('Number of workers to remove:', len(workers_to_remove))
-	print('Number of rows before removing workers:', len(df))
+	workers_to_keep = [worker for worker in workers if worker['worker_id'] not in workers_to_remove]
+	
+	workers_to_remove_info(workers, df)
+
+	before = len(df)
 	df = df[~df['ASSIGNMENT:worker_id'].isin(workers_to_remove)]
-	print('Number of rows after removing workers:', len(df))
-	workers = [worker for worker in workers if worker['worker_id'] not in workers_to_remove]
-	visualizeHTML(df, workers, incorrect, plot_paths)
+	print('Removed ', len(workers_to_remove), ' workers and ', before - len(df), ' rows')
+	visualizeHTML(df, workers_to_keep, incorrect)
 	return df
 
-import matplotlib.pyplot as plt
-import numpy as np
-def graphData(df, workers, incorrect):
-	plot_paths = []
-	# Plot the distribution of the number of assignments per worker
-	assignments_per_worker = df['ASSIGNMENT:worker_id'].value_counts().tolist()
-	plt.hist(assignments_per_worker, bins=100)
-	plt.title('Distribution of the number of assignments per worker')
-	plt.xlabel('Number of assignments')
-	plt.ylabel('Number of workers')
-	assignments_path = 'assignments_per_worker.png'
-	plot_paths.append(assignments_path)
-	plt.savefig(os.path.join(session_dir, assignments_path))
-	plt.clf()
-	# Plot the distribution of the incorrect percentage per worker
-	count_thresholds = [1, 10, 100, 500, 1000]
-	for i, count_threshold in enumerate(count_thresholds):
-		if i < len(count_thresholds) - 1:
-			incorrect_percentages = [worker['incorrect_percent'] for worker in workers if worker['count'] >= count_thresholds[i] and worker['count'] < count_thresholds[i+1]]
-			plt.hist(incorrect_percentages, bins=100)
-			plt.title(f'Distribution of the incorrect percentage per worker between {count_thresholds[i]} and {count_thresholds[i+1]} assignments')
-			plt.xlabel('Incorrect percentage')
-			plt.ylabel('Number of workers')
-			incorrect_path = f'incorrect_percentages_{count_thresholds[i]}_{count_thresholds[i+1]}.png'
-			plot_paths.append(incorrect_path)
-			plt.savefig(os.path.join(session_dir, incorrect_path))
-			plt.clf()
-	return plot_paths
-
-def visualizeHTML(df, workers, incorrect, plot_paths):
+def visualizeHTML(df, workers, incorrect):
 	# Create header
 	html = '<html><head><style>table, th, td {border: 1px solid black;}</style></head><body>'
-	# Visualize the plot paths
-	for plot_path in plot_paths:
-		html += f'<img src="{plot_path}">'
 	# Visualize worker data into buckets
 	html += f'<h1>Workers ({len(workers)})</h1>'
 	count_thresholds = [1, 10, 100, 500, 1000]
@@ -224,6 +202,31 @@ def saveAsCSV(df):
 	unique_urls.to_csv(csv_name, index=False)
 	return csv_name
 
+def dfToHTML(df, session_dir, html_name='low_agreement.html'):
+	# Convert index entries to img_a and img_b
+	df['img_url_a'] = df.index.map(lambda x: x[0])
+	df['img_url_b'] = df.index.map(lambda x: x[1])
+	# Form the column orderings
+	df = df[['img_url_a', 'image_a', 'image_b','img_url_b', 'agreement']]
+	# Drop the index
+	df = df.reset_index(drop=True)
+	# Map img_url_a and img_url_b to img html
+	df['img_url_a'] = df['img_url_a'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
+	df['img_url_b'] = df['img_url_b'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
+
+	# Create html file with the top 10% of disagreements
+	df_html = df.to_html(render_links=True,escape=False)
+	with open(os.path.join(session_dir, html_name), 'w') as f:
+		f.write(df_html)
+
+def filterTrait(df, col='agreement', n=0.7, s='<', name='low_agreement'):
+	# Low Agreement Pairs
+	filter_df = df[df[col] < n] if s == '<' else df[df[col] > n]
+	filter_df.sort_values(by=col, ascending=True)
+	print(filter_df.head(10))
+	dfToHTML(filter_df, session_dir, name+'.html')
+	filter_df.to_csv(os.path.join(session_dir, name+'.csv'))
+
 def findDisagreements(df):
 	url_groups = df.groupby(['INPUT:image_a', 'INPUT:image_b'])
 	url_results = {}
@@ -238,32 +241,14 @@ def findDisagreements(df):
 	results_df = pd.DataFrame.from_dict(url_results, orient='index')
 	results_df = results_df.sort_values(by='agreement', ascending=False)
 	results_df.to_csv(os.path.join(session_dir, 'agreement_results.csv'))
-	# Get the urls for the top 10% of disagreements
-	top_10_percent = results_df[results_df['agreement'] < 0.7]
-	# Convert index entries to img_a and img_b
-	top_10_percent['img_url_a'] = top_10_percent.index.map(lambda x: x[0])
-	top_10_percent['img_url_b'] = top_10_percent.index.map(lambda x: x[1])
-	# Move img_url_a to the first column
-	top_10_percent = top_10_percent[['img_url_a', 'image_a', 'image_b','img_url_b', 'agreement']]
-	# Drop the index
-	top_10_percent = top_10_percent.reset_index(drop=True)
-	# Convert img_url_a and img_url_b to img tags using '''<img src="''' + df1['image'] + '''">''' as the map function with width of 256 px and max height of 256 px
-	top_10_percent['img_url_a'] = top_10_percent['img_url_a'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
-	top_10_percent['img_url_b'] = top_10_percent['img_url_b'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
-	# Create html file with the top 10% of disagreements
-	top_10_percent_html = top_10_percent.to_html(render_links=True,escape=False)
-	with open(os.path.join(session_dir, 'top_10_percent.html'), 'w') as f:
-		f.write(top_10_percent_html)
-	# Print the top ten entries
-	print(top_10_percent.head(10))
-	top_10_percent.to_csv(os.path.join(session_dir, 'top_10_percent.csv'))
+	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement')
 
 import pandas as pd
 def loadTSV(root):
 	# Load .tsv file
 	df = pd.read_csv(root, sep='\t')
-	df = filterBadAssignments(df)
-	df = filterBadInputs(df)
+	df = filterBadAssignments(df) # ASSIGNMENT:status != APPROVED
+	df = filterBadInputs(df) # OUTPUT:result != INPUT:image_a | INPUT:image_b
 	df = filterBadWorkers(df)
 	disagreements = findDisagreements(df)
 	csv_name = saveAsCSV(df)
@@ -286,84 +271,95 @@ def loadMetadata(dir):
 					df = pd.concat([df, parquet_df])
 	return df
 
+def makeWebDataset(csv_name, session_dir, sub_folder='wds'):
+	# Create webdataset dataset
+	wds_output_dir = os.path.join(session_dir, sub_folder)
+	if not os.path.exists(wds_output_dir):
+		os.makedirs(wds_output_dir)
+		print(f'Creating WebDataset of images at {wds_output_dir} using {csv_name}')
+		os.system(f"img2dataset --url_list={csv_name} --output_folder={wds_output_dir} --output_format=webdataset --input_format=csv --url_col=url")
+	return wds_output_dir
+
+def makeEmbeddings(wds_output_dir, session_dir, sub_folder='embeddings'):
+	# https://github./rom1504/clip-retrieval
+	clip_model = "ViT-L/14"
+	root_emb_dir = os.path.join(session_dir, sub_folder)
+	if not os.path.exists(root_emb_dir):
+		# Get list of all .tar files
+		tar_files = [f for f in os.listdir(wds_output_dir) if f.endswith('.tar')]
+		# Create {000..nnn}.tar style files
+		# Get largest tar file number
+		max_tar_num = 0
+		for tar_file in tar_files:
+			tar_num = int(tar_file.split('.')[0])
+			if tar_num > max_tar_num:
+				max_tar_num = tar_num
+		# Create string
+		max_tar_num = str(max_tar_num).zfill(5)
+		tar_group_string = "{00000.." + str(max_tar_num) + "}.tar"
+		tar_path = f"./{wds_output_dir}/{tar_group_string}"
+		# Create new tar files
+		os.makedirs(root_emb_dir)
+		print(f"Creating embeddings for {tar_path}")
+		os.system(f"clip-retrieval inference --input_dataset={tar_path} --clip_model={clip_model}, --enable_wandb=False --enable_text=False --output_folder={root_emb_dir} --input_format=webdataset")
+		# Create list of pairs with valid images and embeddings
+	return root_emb_dir
+
+def makePairDataset(toloka_df, session_dir, name='toloka'):
+	data_parquet_path = os.path.join(session_dir, name+'.parquet')
+	if not os.path.exists(data_parquet_path):
+		img_meta_df = loadMetadata(wds_dir) # ["key"]
+		emb_meta_df = loadMetadata(emb_dir) # ["image_path"]
+		def getEmbeddingIndex(image_url):
+			# Find the entry in img_meta_df where "url"	== image_a
+			image_row = img_meta_df[img_meta_df['url'] == image_url]
+			# Check if the url was found
+			if len(image_row) == 0:
+				return None
+			# Check if image_row status is "success"
+			if image_row['status'].values[0] != 'success':
+				return None
+			image_key = image_row['key'].values[0]
+			image_emb_row = emb_meta_df[emb_meta_df['image_path'] == image_key]
+			# Check if the embedding was found
+			if len(image_emb_row) == 0:
+				return None
+			image_emb_index = image_emb_row.index[0]
+			return image_emb_index
+
+		new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
+		# Find rows in img_meta_df where "status" != "success"
+		failures = img_meta_df[img_meta_df['status'] != 'success']
+		# Remove entries in toloka_df where "INPUT:image_a" or "INPUT:image_b" are in failures
+		before = len(toloka_df)
+		print(f'Before removing failed images, toloka_df has {before} rows')
+		for row in tqdm(failures.iterrows(), total=len(failures)):
+			url = row[1]['url']
+			toloka_df = toloka_df[(toloka_df['INPUT:image_a'] != url) & (toloka_df['INPUT:image_b'] != url)]
+		after = len(toloka_df)
+		print(f'Removed {before - after} rows from toloka_df due to failed images')
+		# Iterate through the Toloka dataset
+		print('Iterating through Toloka dataset')
+		skipped = 0
+		for row in tqdm(toloka_df.iterrows(), total=len(toloka_df)):
+			image_a, image_b, result = row[1]['INPUT:image_a'], row[1]['INPUT:image_b'], row[1]['OUTPUT:result']
+			# Find index in embedding
+			image_a_emb_idx = getEmbeddingIndex(image_a)
+			image_b_emb_idx = getEmbeddingIndex(image_b)
+			# Check if the url was found
+			if image_a_emb_idx is None or image_b_emb_idx is None:
+				skipped += 1
+				break
+			# Add to new_df us pd.concat
+			new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
+
+		print(f'Skipped {skipped} rows, {len(new_df)} rows left')
+		# Save new_df as parquet
+		new_df.to_parquet(os.path.join(session_dir, 'toloka.parquet'))
+
 session_dir = prepareFolders()
 csv_name, toloka_df = loadTSV('data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv')
-wds_output_dir = os.path.join(session_dir, 'wds')
-if not os.path.exists(wds_output_dir):
-	os.makedirs(wds_output_dir)
-	print(f'Creating WebDataset of images at {wds_output_dir} using {csv_name}')
-	os.system(f"img2dataset --url_list={csv_name} --output_folder={wds_output_dir} --output_format=webdataset --input_format=csv --url_col=url")
-
-# https://github./rom1504/clip-retrieval
-clip_model = "ViT-L/14"
-root_emb_dir = os.path.join(session_dir, 'embeddings/')
-if not os.path.exists(root_emb_dir):
-	# Get list of all .tar files
-	tar_files = [f for f in os.listdir(wds_output_dir) if f.endswith('.tar')]
-	# Create {000..nnn}.tar style files
-	# Get largest tar file number
-	max_tar_num = 0
-	for tar_file in tar_files:
-		tar_num = int(tar_file.split('.')[0])
-		if tar_num > max_tar_num:
-			max_tar_num = tar_num
-	# Create string
-	max_tar_num = str(max_tar_num).zfill(5)
-	tar_group_string = "{00000.." + str(max_tar_num) + "}.tar"
-	tar_path = f"./{wds_output_dir}/{tar_group_string}"
-	# Create new tar filesw
-	os.makedirs(root_emb_dir)
-	print(f"Creating embeddings for {tar_path}")
-	os.system(f"clip-retrieval inference --input_dataset={tar_path} --clip_model={clip_model}, --enable_wandb=False --enable_text=False --output_folder={root_emb_dir} --input_format=webdataset")
-	# Create list of pairs with valid images and embeddings
-
-data_parquet_path = os.path.join(session_dir, 'toloka.parquet')
-if not os.path.exists(data_parquet_path):
-	img_meta_df = loadMetadata(wds_output_dir) # ["key"]
-	emb_meta_df = loadMetadata(root_emb_dir) # ["image_path"]
-	def getEmbeddingIndex(image_url):
-		# Find the entry in img_meta_df where "url"	== image_a
-		image_row = img_meta_df[img_meta_df['url'] == image_url]
-		# Check if the url was found
-		if len(image_row) == 0:
-			return None
-		# Check if image_row status is "success"
-		if image_row['status'].values[0] != 'success':
-			return None
-		image_key = image_row['key'].values[0]
-		image_emb_row = emb_meta_df[emb_meta_df['image_path'] == image_key]
-		# Check if the embedding was found
-		if len(image_emb_row) == 0:
-			return None
-		image_emb_index = image_emb_row.index[0]
-		return image_emb_index
-
-	new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
-	# Find rows in img_meta_df where "status" != "success"
-	failures = img_meta_df[img_meta_df['status'] != 'success']
-	# Remove entries in toloka_df where "INPUT:image_a" or "INPUT:image_b" are in failures
-	before = len(toloka_df)
-	print(f'Before removing failed images, toloka_df has {before} rows')
-	for row in tqdm(failures.iterrows(), total=len(failures)):
-		url = row[1]['url']
-		toloka_df = toloka_df[(toloka_df['INPUT:image_a'] != url) & (toloka_df['INPUT:image_b'] != url)]
-	after = len(toloka_df)
-	print(f'Removed {before - after} rows from toloka_df due to failed images')
-	# Iterate through the Toloka dataset
-	print('Iterating through Toloka dataset')
-	skipped = 0
-	for row in tqdm(toloka_df.iterrows(), total=len(toloka_df)):
-		image_a, image_b, result = row[1]['INPUT:image_a'], row[1]['INPUT:image_b'], row[1]['OUTPUT:result']
-		# Find index in embedding
-		image_a_emb_idx = getEmbeddingIndex(image_a)
-		image_b_emb_idx = getEmbeddingIndex(image_b)
-		# Check if the url was found
-		if image_a_emb_idx is None or image_b_emb_idx is None:
-			skipped += 1
-			break
-		# Add to new_df us pd.concat
-		new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
-
-	print(f'Skipped {skipped} rows, {len(new_df)} rows left')
-	# Save new_df as parquet
-	new_df.to_parquet(os.path.join(session_dir, 'toloka.parquet'))
+wds_dir = makeWebDataset(csv_name, session_dir)
+emb_dir = makeEmbeddings(wds_dir, session_dir)
+# Make the parquet which combines the embeddings and the metadata
+parquet_path = makePairDataset(toloka_df, session_dir)
