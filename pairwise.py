@@ -107,13 +107,22 @@ class AestheticScoreMLP0(pl.LightningModule):
         return score
 
     def validation_step(self, batch, batch_idx):
-        # rewrite to match train
+        # Get x values
         x1 = batch[self.x1col]
         x2 = batch[self.x2col]
-        y = batch[self.ycol].reshape(-1, 1)
-        x_hat = self.forward(x1, x2)
-        loss = F.mse_loss(x_hat, y)
-        self.log("valid/loss_epoch", loss)
+
+        # Get unnormalized aesthetic scores
+        s1 = self(x1)
+        s2 = self(x2)
+        delta_s = s1 - s2
+
+        # Get y values
+        y_hat = torch.sigmoid(delta_s) # probability of x1 preferred x2  0.0-1.0
+        y = batch[self.ycol].reshape(-1, 1) # observed probability
+
+        # Calculate loss
+        loss = F.binary_cross_entropy(y_hat, y)
+        self.log('train/loss', loss, on_epoch=True)
         return loss
         
     def configure_optimizers(self):

@@ -322,8 +322,8 @@ def filterToloka(toloka_df, img_meta_df):
 	toloka_df = filterFailures(toloka_df, img_meta_df)
 	return toloka_df
 
-def makePairDF(emb_df, toloka_df):
-	url_groups = toloka_df.groupby(['INPUT:image_a', 'INPUT:image_b'])
+def makePairDF(toloka_emb_idx_df):
+	url_groups = toloka_emb_idx_df.groupby(['INPUT:image_a', 'INPUT:image_b'])
 	url_results = {}
 	for name, group in url_groups:
 		a_wins = group[group['OUTPUT:result'] == 'image_a'].shape[0]
@@ -332,11 +332,11 @@ def makePairDF(emb_df, toloka_df):
 	# Convert to ratio
 	for key, value in url_results.items():
 		total = value['image_a'] + value['image_b']
-		value['agreement'] = value['image_a'] / total if value['image_a'] > value['image_b'] else value['image_b'] / total
+		value['agreement'] = value['image_a'] / total
 	results_df = pd.DataFrame.from_dict(url_results, orient='index')
 	results_df = results_df.sort_values(by='agreement', ascending=False)
 	results_df.to_csv(os.path.join(session_dir, 'agreement_results.csv'))
-	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement')
+	# filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement')
 
 def createPairs(tsv_path, session_dir, name='toloka3'):
 	data_parquet_path = os.path.join(session_dir, name+'.parquet')
@@ -357,7 +357,7 @@ def createPairs(tsv_path, session_dir, name='toloka3'):
 
 	else:
 		toloka_emb_idx_df = pd.read_parquet(data_parquet_path)
-	pair_df = makePairDF(toloka_emb_idx_df, toloka_df)
+	pair_df = makePairDF(toloka_emb_idx_df)
 
 session_dir = prepareFolders()
 tsv_path = 'data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv'
