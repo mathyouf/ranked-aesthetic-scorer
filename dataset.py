@@ -60,8 +60,8 @@ class PairRankPoolDataset(Dataset):
         # Find the entry
         pair = self.pair_metadata.iloc[image_a_index]
         # Get the indices of the embeddings
-        image_a_index = pair['image_a_emb_idx'].values[0]
-        image_b_index = pair['image_b_emb_idx'].values[0]
+        image_a_index = pair['image_a_emb_idx']
+        image_b_index = pair['image_b_emb_idx']
         # Get the embeddings
         x1 = self.embeddings[image_a_index]
         x2 = self.embeddings[image_b_index]
