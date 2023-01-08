@@ -4,9 +4,16 @@ A changed version of the [LAION Aesthetics](https://laion.ai/blog//) model calle
 ## Data
 
 ### Toloka
+Idea: Use [inter-rater reliability coefficient](https://en.wikipedia.org/wiki/Inter-rater_reliability) as a metric to be directly guessed by the model
 
 ### Reddit
+Idea: Compare posts which were posted within an hour of each other in the time of day
+
+Idea: Compare subreddits about learning a skill vs pro stuff from that skill (photography, beginnerphotography) (photorealism/ learntodraw)
+
+
 [Nature Network](https://www.reddit.com/r/sfwpornnetwork/wiki/network/#wiki_nature)
+
 `python data/processURS.py`
 
 

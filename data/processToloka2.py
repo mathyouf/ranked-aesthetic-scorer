@@ -59,9 +59,7 @@ def getWorkerInfo(df):
 	return workers, incorrect
 
 def workers_to_remove_info(workers, df):
-	# Get the info on what images the workers got wrong
-	
-
+	# 
 
 def filterBadWorkers(df):
 	workers, incorrect = getWorkerInfo(df)
@@ -249,8 +247,8 @@ def loadTSV(root):
 	df = pd.read_csv(root, sep='\t')
 	df = filterBadAssignments(df) # ASSIGNMENT:status != APPROVED
 	df = filterBadInputs(df) # OUTPUT:result != INPUT:image_a | INPUT:image_b
-	df = filterBadWorkers(df)
 	disagreements = findDisagreements(df)
+	df = filterBadWorkers(df)
 	csv_name = saveAsCSV(df)
 	return csv_name, df
 
