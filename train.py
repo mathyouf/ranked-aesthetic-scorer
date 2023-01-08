@@ -35,21 +35,33 @@ class ImagePredictionLogger(pl.Callback):
             except:
                 print("Error downloading image")
                 imgs2.append(Image.new('RGB', (256, 256)))
+
         caption1, caption2 = self.val_samples['caption1'], self.val_samples['caption2']
+
         # To device
-        emb1 = emb1.to(pl_module.device)
-        emb2 = emb2.to(pl_module.device)
-        rank = pl_module(emb1, emb2)
+        x1 = emb1.to(pl_module.device)
+        x2 = emb2.to(pl_module.device)
+
+        # Get unnormalized aesthetic scores
+        s1 = self(x1)
+        s2 = self(x2)
+        delta_s = s1 - s2
+
+        # Get y values
+        y_hat = torch.sigmoid(delta_s) # probability of x1 preferred x2  0.0-1.0
+        y = label
+
         # Log the images - download url
          # Get image pairs and ranks
         table = wandb.Table(columns=['img1', 'img2', 'rank', 'label'])
         for i in range(len(imgs1)):
             img1 = wandb.Image(imgs1[i], caption=caption1[i])
             img2 = wandb.Image(imgs2[i], caption=caption2[i])
-            single_rank = int(rank[i].detach().cpu().item())
+            y = y[i].detach().cpu().item()
             # Convert to int
-            single_label = int(label[i].detach().cpu().item())
-            table.add_data(img1, img2, single_rank, single_label)
+            y_hat = y_hat[i].detach().cpu().item()
+            table.add_data(img1, img2, y, y_hat)
+
         # Log the table
         trainer.logger.experiment.log({
             "predictions": table
