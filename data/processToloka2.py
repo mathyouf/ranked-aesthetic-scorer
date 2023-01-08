@@ -328,7 +328,12 @@ def makePairDF(toloka_emb_idx_df):
 	for name, group in url_groups:
 		a_wins = group[group['OUTPUT:result'] == 'image_a'].shape[0]
 		b_wins = group[group['OUTPUT:result'] == 'image_b'].shape[0]
-		url_results[name] = {'image_a': a_wins, 'image_b': b_wins, 'image_a_emb_idx': int(group['image_a_emb_idx'].iloc[0]), 'image_b_emb_idx': int(group['image_b_emb_idx'].iloc[0])}
+		a_idx = group['image_a_emb_idx'].iloc[0]
+		b_idx = group['image_b_emb_idx'].iloc[0]
+		# Check if value is nan
+		if a_idx != a_idx or b_idx != b_idx:
+			continue
+		url_results[name] = {'image_a': a_wins, 'image_b': b_wins, 'image_a_emb_idx': int(a_idx), 'image_b_emb_idx': int(b_idx)}
 	# Convert to ratio
 	for key, value in url_results.items():
 		total = value['image_a'] + value['image_b']
