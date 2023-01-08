@@ -297,7 +297,7 @@ def makeEmbeddings(wds_output_dir, session_dir, sub_folder='embeddings'):
 		# Create list of pairs with valid images and embeddings
 	return root_emb_dir
 
-def createPairDataset(toloka_df, getEmbeddingIndex):
+def findRemainingEmbs(toloka_df, getEmbeddingIndex, data_parquet_path):
 	skipped = 0
 	new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
 	# Iterate through each observation and create a new df of Pairs
@@ -309,12 +309,13 @@ def createPairDataset(toloka_df, getEmbeddingIndex):
 		# Check if the url was found
 		if image_a_emb_idx is None or image_b_emb_idx is None:
 			skipped += 1
-			break
+			continue
 		# Add to new_df us pd.concat
 		new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
 	print(f'Skipped {skipped} rows, {len(new_df)} rows left')
 	# Save new_df as parquet
-	new_df.to_parquet(os.path.join(session_dir, 'toloka.parquet'))
+	new_df.to_parquet(data_parquet_path)
+	return new_df
 
 def filterFailures(toloka_df, img_meta_df):
 	# Find rows in img_meta_df where "status" != "success"
@@ -329,12 +330,35 @@ def filterFailures(toloka_df, img_meta_df):
 	print(f'Removed {before - after} rows from toloka_df due to failed images')
 	return toloka_df
 
-def makePairDataset(tsv_path, session_dir, name='toloka'):
+def filterToloka(toloka_df, img_meta_df):
+	toloka_df = filterBadAssignments(toloka_df) # ASSIGNMENT:status != APPROVED
+	toloka_df = filterBadInputs(toloka_df) # OUTPUT:result != INPUT:image_a | INPUT:image_b
+	toloka_df = filterFailures(toloka_df, img_meta_df)
+	return toloka_df
+
+def makePairDF(emb_df, toloka_df):
+	url_groups = toloka_df.groupby(['INPUT:image_a', 'INPUT:image_b'])
+	url_results = {}
+	for name, group in url_groups:
+		a_wins = group[group['OUTPUT:result'] == 'image_a'].shape[0]
+		b_wins = group[group['OUTPUT:result'] == 'image_b'].shape[0]
+		url_results[name] = {'image_a': a_wins, 'image_b': b_wins}
+	# Convert to ratio
+	for key, value in url_results.items():
+		total = value['image_a'] + value['image_b']
+		value['agreement'] = value['image_a'] / total if value['image_a'] > value['image_b'] else value['image_b'] / total
+	results_df = pd.DataFrame.from_dict(url_results, orient='index')
+	results_df = results_df.sort_values(by='agreement', ascending=False)
+	results_df.to_csv(os.path.join(session_dir, 'agreement_results.csv'))
+	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement')
+
+
+def createPairs(tsv_path, session_dir, name='toloka3'):
 	data_parquet_path = os.path.join(session_dir, name+'.parquet')
 	if not os.path.exists(data_parquet_path):
 		toloka_df = pd.read_csv(tsv_path, sep='\t')
 		img_meta_df = loadMetadata(wds_dir) # ["key"]
-		toloka_df = filterFailures(toloka_df, img_meta_df)
+		toloka_df = filterToloka(toloka_df, img_meta_df)
 		emb_meta_df = loadMetadata(emb_dir) # ["image_path"]
 		def getEmbeddingIndex(image_url):
 			# Find the entry in img_meta_df where "url"	== image_a
@@ -353,7 +377,10 @@ def makePairDataset(tsv_path, session_dir, name='toloka'):
 			image_emb_index = image_emb_row.index[0]
 			return image_emb_index
 		# Create pair dataset
-		createPairDataset(toloka_df, getEmbeddingIndex)
+		emb_df = findRemainingEmbs(toloka_df, getEmbeddingIndex)
+	else:
+		emb_df = pd.read_parquet(data_parquet_path)
+	pair_df = makePairDF(emb_df, toloka_df)
 
 session_dir = prepareFolders()
 tsv_path = 'data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv'
@@ -364,4 +391,4 @@ wds_dir = makeWebDataset(csv_name, session_dir)
 emb_dir = makeEmbeddings(wds_dir, session_dir)
 
 # Create Pairs: image_a, image_b, preference (-1.0 to 1.0)
-parquet_path = makePairDataset(tsv_path, session_dir)
+createPairs(tsv_path, session_dir)
