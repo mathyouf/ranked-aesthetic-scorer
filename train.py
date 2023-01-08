@@ -53,14 +53,14 @@ class ImagePredictionLogger(pl.Callback):
 
         # Log the images - download url
          # Get image pairs and ranks
-        table = wandb.Table(columns=['img1', 'img2', 'rank', 'label'])
+        table = wandb.Table(columns=['img1', 'img2', 'pred', 'label'])
         for i in range(len(imgs1)):
             img1 = wandb.Image(imgs1[i], caption=caption1[i])
             img2 = wandb.Image(imgs2[i], caption=caption2[i])
-            y = y.detach().cpu().item()
+            y = y.detach().cpu()[i]
             # Convert to int
-            y_hat = y_hat.detach().cpu().item()
-            table.add_data(img1, img2, y, y_hat)
+            y_hat = y_hat.detach().cpu()[i]
+            table.add_data(img1, img2, y_hat, y)
 
         # Log the table
         trainer.logger.experiment.log({
@@ -84,9 +84,9 @@ model.load_state_dict(s, strict=False)
 # Trainer for model + dataset
 trainer = pl.Trainer(
     logger=WandbLogger(project="aesthetic-rankings"),    # W&B integration
-    log_every_n_steps=50,   # set the logging frequency
+    log_every_n_steps=250,   # set the logging frequency
     gpus=[3],               # Select GPUs
-    max_epochs=100,      # number of epochs
+    max_epochs=10000,      # number of epochs
     deterministic=True,     # keep it deterministic
     callbacks=[ImagePredictionLogger(samples)]
 )
