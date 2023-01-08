@@ -231,8 +231,8 @@ def findDisagreements(df):
 	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement')
 
 import pandas as pd
-def tsvTocsv(root, csv_name='wds.csv'):
-	df = pd.read_csv(root, sep='\t')
+def tsvTocsv(tsv_path, session_dir, csv_name='wds.csv'):
+	df = pd.read_csv(tsv_path, sep='\t')
 	unique_urls = getUniqueURLS(df)
 	csv_name = os.path.join(session_dir, csv_name)
 	unique_urls.to_csv(csv_name, index=False)
@@ -297,9 +297,10 @@ def makeEmbeddings(wds_output_dir, session_dir, sub_folder='embeddings'):
 		# Create list of pairs with valid images and embeddings
 	return root_emb_dir
 
-def createPairDataset():
+def createPairDataset(toloka_df, getEmbeddingIndex):
 	skipped = 0
 	new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
+	# Iterate through each observation and create a new df of Pairs
 	for row in tqdm(toloka_df.iterrows(), total=len(toloka_df)):
 		image_a, image_b, result = row[1]['INPUT:image_a'], row[1]['INPUT:image_b'], row[1]['OUTPUT:result']
 		# Find index in embedding
@@ -311,15 +312,29 @@ def createPairDataset():
 			break
 		# Add to new_df us pd.concat
 		new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
-
 	print(f'Skipped {skipped} rows, {len(new_df)} rows left')
 	# Save new_df as parquet
 	new_df.to_parquet(os.path.join(session_dir, 'toloka.parquet'))
 
-def makePairDataset(toloka_df, session_dir, name='toloka'):
+def filterFailures(toloka_df, img_meta_df):
+	# Find rows in img_meta_df where "status" != "success"
+	failures = img_meta_df[img_meta_df['status'] != 'success']
+	# Remove entries in toloka_df where "INPUT:image_a" or "INPUT:image_b" are in failures
+	before = len(toloka_df)
+	print(f'Before removing failed images, toloka_df has {before} rows')
+	for row in tqdm(failures.iterrows(), total=len(failures)):
+		url = row[1]['url']
+		toloka_df = toloka_df[(toloka_df['INPUT:image_a'] != url) & (toloka_df['INPUT:image_b'] != url)]
+	after = len(toloka_df)
+	print(f'Removed {before - after} rows from toloka_df due to failed images')
+	return toloka_df
+
+def makePairDataset(tsv_path, session_dir, name='toloka'):
 	data_parquet_path = os.path.join(session_dir, name+'.parquet')
 	if not os.path.exists(data_parquet_path):
+		toloka_df = pd.read_csv(tsv_path, sep='\t')
 		img_meta_df = loadMetadata(wds_dir) # ["key"]
+		toloka_df = filterFailures(toloka_df, img_meta_df)
 		emb_meta_df = loadMetadata(emb_dir) # ["image_path"]
 		def getEmbeddingIndex(image_url):
 			# Find the entry in img_meta_df where "url"	== image_a
@@ -337,26 +352,16 @@ def makePairDataset(toloka_df, session_dir, name='toloka'):
 				return None
 			image_emb_index = image_emb_row.index[0]
 			return image_emb_index
-		# Find rows in img_meta_df where "status" != "success"
-		failures = img_meta_df[img_meta_df['status'] != 'success']
-		# Remove entries in toloka_df where "INPUT:image_a" or "INPUT:image_b" are in failures
-		before = len(toloka_df)
-		print(f'Before removing failed images, toloka_df has {before} rows')
-		for row in tqdm(failures.iterrows(), total=len(failures)):
-			url = row[1]['url']
-			toloka_df = toloka_df[(toloka_df['INPUT:image_a'] != url) & (toloka_df['INPUT:image_b'] != url)]
-		after = len(toloka_df)
-		print(f'Removed {before - after} rows from toloka_df due to failed images')
 		# Create pair dataset
-		createPairDataset()
+		createPairDataset(toloka_df, getEmbeddingIndex)
 
 session_dir = prepareFolders()
 tsv_path = 'data/inputs/toloka/assignments_from_pool_36836296__16-12-2022.tsv'
 
-# Pipeline to get Embeddings: (762,)
-csv_name = tsvTocsv(tsv_path)
+# Create Embeddings: (762,)
+csv_name = tsvTocsv(tsv_path, session_dir)
 wds_dir = makeWebDataset(csv_name, session_dir)
 emb_dir = makeEmbeddings(wds_dir, session_dir)
 
-# Pipeline to get Pairs: image_a, image_b, preference (-1.0 to 1.0)
-parquet_path = makePairDataset(session_dir)
+# Create Pairs: image_a, image_b, preference (-1.0 to 1.0)
+parquet_path = makePairDataset(tsv_path, session_dir)
