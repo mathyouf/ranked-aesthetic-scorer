@@ -349,12 +349,11 @@ def createPairs(tsv_path, session_dir, name='toloka3'):
 		img_meta_df = img_meta_df[img_meta_df['status'] == 'success']
 		# Merge img_meta_df and emb_meta_df on "key" and "image_path", remove entries where no match is found
 		meta_df = pd.merge(img_meta_df, emb_meta_df, left_on='key', right_on='image_path')
-		# Create a function that takes an image url and returns the embedding index
-		getEmbeddingIndex = lambda url: meta_df[meta_df['url'] == url]['index'].values[0]
+		# Create a function that takes an image url and returns the index of the entry in meta_df and handles if no match is found
+		getEmbeddingIndex = lambda url: meta_df[meta_df['url'] == url].index[0] if len(meta_df[meta_df['url'] == url]) > 0 else None
 		# Create pair dataset
 		toloka_emb_idx_df = findRemainingEmbs(toloka_df, getEmbeddingIndex, data_parquet_path)
 		toloka_emb_idx_df.to_parquet(data_parquet_path)
-
 	else:
 		toloka_emb_idx_df = pd.read_parquet(data_parquet_path)
 	pair_df = makePairDF(toloka_emb_idx_df)
