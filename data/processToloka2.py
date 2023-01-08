@@ -297,7 +297,7 @@ def makeEmbeddings(wds_output_dir, session_dir, sub_folder='embeddings'):
 		# Create list of pairs with valid images and embeddings
 	return root_emb_dir
 
-def findRemainingEmbs(toloka_df, getEmbeddingIndex, data_parquet_path):
+def findRemainingEmbs(toloka_df, getEmbeddingIndex):
 	skipped = 0
 	new_df = pd.DataFrame(columns=['image_a_idx', 'image_b_idx', 'result'])
 	# Iterate through each observation and create a new df of Pairs
@@ -314,7 +314,6 @@ def findRemainingEmbs(toloka_df, getEmbeddingIndex, data_parquet_path):
 		new_df = pd.concat([new_df, pd.DataFrame([[image_a_emb_idx, image_b_emb_idx, result]], columns=['image_a_idx', 'image_b_idx', 'result'])])
 	print(f'Skipped {skipped} rows, {len(new_df)} rows left')
 	# Save new_df as parquet
-	new_df.to_parquet(data_parquet_path)
 	return new_df
 
 def filterFailures(toloka_df, img_meta_df):
@@ -352,7 +351,6 @@ def makePairDF(emb_df, toloka_df):
 	results_df.to_csv(os.path.join(session_dir, 'agreement_results.csv'))
 	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement')
 
-
 def createPairs(tsv_path, session_dir, name='toloka3'):
 	data_parquet_path = os.path.join(session_dir, name+'.parquet')
 	if not os.path.exists(data_parquet_path):
@@ -378,6 +376,8 @@ def createPairs(tsv_path, session_dir, name='toloka3'):
 			return image_emb_index
 		# Create pair dataset
 		emb_df = findRemainingEmbs(toloka_df, getEmbeddingIndex)
+		emb_df.to_parquet(data_parquet_path)
+
 	else:
 		emb_df = pd.read_parquet(data_parquet_path)
 	pair_df = makePairDF(emb_df, toloka_df)
