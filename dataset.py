@@ -57,8 +57,10 @@ class PairRankPoolDataset(Dataset):
     def __getitem__(self, index):
         # Get random value
         image_a_index = np.random.randint(0, len(self.pair_metadata))
-        # Find the entry in column image_a_emb_idx
-        pair = self.pair_metadata[self.pair_metadata['image_a_emb_idx'] == image_a_index]
+        # Find the entry
+        pair = self.pair_metadata.iloc[image_a_index]
+        # Get the indices of the embeddings
+        image_a_index = pair['image_a_emb_idx'].values[0]
         image_b_index = pair['image_b_emb_idx'].values[0]
         # Get the embeddings
         x1 = self.embeddings[image_a_index]
@@ -66,9 +68,8 @@ class PairRankPoolDataset(Dataset):
         # urls from first value in index
         # ,,image_a,image_b,image_a_emb_idx,image_b_emb_idx,agreement
         # https://rlv.zcache.co.uk/paris_france_vintage_look_postcard-r55573c3341e14a2f9f1e74dc74d1bea6_vgbaq_8byvr_307.jpg,http://img2.imagesbn.com/p/9780313279775_p0_v2_s260x420.JPG,14,0,1127.0,5291.0,1.0
-        urls = pair[0].values[0].split(',')
-        url1 = urls[0]
-        url2 = urls[1]
+        url1 = pair['Unnamed: 0'].values[0]
+        url2 = pair['Unnamed: 1'].values[0]
         # Get the label
         result = pair['agreement'].values[0]
         # Convert label to tensor
