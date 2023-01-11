@@ -4,6 +4,7 @@ import torch
 import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+import torch.nn.functional as F
 from PIL import Image
 import requests
 from datetime import datetime
@@ -46,21 +47,23 @@ class ImagePredictionLogger(pl.Callback):
         s1 = pl_module(x1)
         s2 = pl_module(x2)
         delta_s = s1 - s2
+        delta_s
 
         # Get y values
-        y_hat = torch.sigmoid(delta_s) # probability of x1 preferred x2  0.0-1.0
-        y = label
-
+        y_hat = torch.sigmoid(delta_s)
+        y_hat = y_hat.detach().cpu() # probability of x1 preferred x2  0.0-1.0
+        y = label.detach().cpu().reshape(-1, 1)
         # Log the images - download url
          # Get image pairs and ranks
-        table = wandb.Table(columns=['img1', 'img2', 'pred', 'label'])
+        table = wandb.Table(columns=['img1', 'img2', 'pred', 'label', 'bce_loss'])
         for i in range(len(imgs1)):
             img1 = wandb.Image(imgs1[i], caption=caption1[i])
             img2 = wandb.Image(imgs2[i], caption=caption2[i])
-            y = y.detach().cpu()[i]
-            # Convert to int
-            y_hat = y_hat.detach().cpu()[i]
-            table.add_data(img1, img2, y_hat, y)
+            log_y = y[i]
+            # access ith element of y_hat (8,1)
+            log_y_hat = y_hat[i]
+            log_loss_val = F.binary_cross_entropy(log_y_hat, log_y)
+            table.add_data(img1, img2, log_y_hat, log_y, log_loss_val)
 
         # Log the table
         trainer.logger.experiment.log({

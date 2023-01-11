@@ -39,11 +39,11 @@ class MLPOriginal(pl.LightningModule):
         return self.layers(x)
 
     def training_step(self, batch, batch_idx):
-            x = batch[self.xcol]
-            y = batch[self.ycol].reshape(-1, 1)
-            x_hat = self.layers(x)
-            loss = F.mse_loss(x_hat, y)
-            return loss
+        x = batch[self.xcol]
+        y = batch[self.ycol].reshape(-1, 1)
+        x_hat = self.layers(x)
+        loss = F.mse_loss(x_hat, y)
+        return loss
     
     def validation_step(self, batch, batch_idx):
         x = batch[self.xcol]

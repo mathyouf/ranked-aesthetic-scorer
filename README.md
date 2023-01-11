@@ -4,6 +4,7 @@ A changed version of the [LAION Aesthetics](https://laion.ai/blog//) model calle
 ## Data
 
 ### Toloka
+Idea (from Charles): Use rule of 3, (3/total for rater scores). In general, don't use the probability scores of 0.0 or 1.0
 Idea: Use [inter-rater reliability coefficient](https://en.wikipedia.org/wiki/Inter-rater_reliability) as a metric to be directly guessed by the model
 
 > Reliable raters agree with the "official" rating of a performance.
