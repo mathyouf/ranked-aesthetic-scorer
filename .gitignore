@@ -12,6 +12,7 @@ wandb
 # Other
 **/*pycache*
 **/*.pth
+**/*.ckpt
 
 !data/outputs/toloka/top_10_percent.html
 
