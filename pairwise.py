@@ -57,8 +57,9 @@ class MLPOriginal(pl.LightningModule):
         return optimizer
 
 class AestheticScoreMLP0(pl.LightningModule):
-    def __init__(self, input_size, x1col='emb1', x2col='emb2', ycol='label'):
+    def __init__(self, input_size, x1col='emb1', x2col='emb2', ycol='label', lr=1e-3):
         super().__init__()
+        self.lr = lr
         self.input_size = input_size
         self.x1col = x1col
         self.x2col = x2col
@@ -95,6 +96,7 @@ class AestheticScoreMLP0(pl.LightningModule):
         # Calculate loss
         loss = F.binary_cross_entropy(y_hat, y)
         self.log('train/loss', loss, on_epoch=True)
+        # Ad other
         return loss
 
     #TODO
@@ -126,7 +128,7 @@ class AestheticScoreMLP0(pl.LightningModule):
         return loss
         
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=1e-3)
+        optimizer = Adam(self.parameters(), lr=self.lr)
         return optimizer
 
 #TODO: test this yo! thx charles

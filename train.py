@@ -53,15 +53,18 @@ class ImagePredictionLogger(pl.Callback):
         y_hat = torch.sigmoid(delta_s)
         y_hat = y_hat.detach().cpu() # probability of x1 preferred x2  0.0-1.0
         y = label.detach().cpu().reshape(-1, 1)
+        # If y is 0.0 or 1.0, change to 0.01 or 0.99
+        y[y == 0.0] = 0.05
+        y[y == 1.0] = 0.95
         # Log the images - download url
          # Get image pairs and ranks
         table = wandb.Table(columns=['img1', 'img2', 'pred', 'label', 'bce_loss'])
         for i in range(len(imgs1)):
             img1 = wandb.Image(imgs1[i], caption=caption1[i])
             img2 = wandb.Image(imgs2[i], caption=caption2[i])
-            log_y = y[i]
+            log_y = y[i][0]
             # access ith element of y_hat (8,1)
-            log_y_hat = y_hat[i]
+            log_y_hat = y_hat[i][0]
             log_loss_val = F.binary_cross_entropy(log_y_hat, log_y)
             table.add_data(img1, img2, log_y_hat, log_y, log_loss_val)
 
@@ -71,29 +74,50 @@ class ImagePredictionLogger(pl.Callback):
         })
 
 # Folder which aggregates the results from running clip-retrieval on 1 or more datasets
-tsv_embed_folders = ["./data/outputs/toloka/"]
-roots = {"reddit": None, "tsv": tsv_embed_folders}
-# Rank Dataset
-dataset = RankDataModule(roots=roots, batch_size=8)
-dataset.prepare_data()
-dataset.setup()
-samples = next(iter(dataset.val_dataloader()))
-embedding_size = samples['emb1'].shape[-1]
-# Aesthetic Model
-model = AestheticScoreMLP0(embedding_size)
-# Weights from improved-aesthetic-scorer
-s = torch.load("./model_weights/sac+logos+ava1-l14-linearMSE.pth")
-model.load_state_dict(s, strict=False)
-# Trainer for model + dataset
-trainer = pl.Trainer(
-    logger=WandbLogger(project="aesthetic-rankings"),    # W&B integration
-    log_every_n_steps=250,   # set the logging frequency
-    gpus=[3],               # Select GPUs
-    max_epochs=10000,      # number of epochs
-    deterministic=True,     # keep it deterministic
-    callbacks=[ImagePredictionLogger(samples)]
-)
-trainer.fit(model, dataset)
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-save_path = f"./model_weights/{timestamp}.pth"
-torch.save(model.state_dict(), save_path)
+def train(config=None):
+        with wandb.init(config=config):
+            tsv_embed_folders = ["./data/outputs/toloka/"]
+            roots = {"reddit": None, "tsv": tsv_embed_folders}
+            # Rank Dataset
+            dataset = RankDataModule(roots=roots, batch_size=wandb.config.batch_size)
+            dataset.prepare_data()
+            dataset.setup()
+            samples = next(iter(dataset.val_dataloader()))
+            embedding_size = samples['emb1'].shape[-1]
+            # Aesthetic Model
+            model = AestheticScoreMLP0(embedding_size, lr=wandb.config.lr)
+            # Weights from improved-aesthetic-scorer
+            s = torch.load("./model_weights/sac+logos+ava1-l14-linearMSE.pth")
+            model.load_state_dict(s, strict=False)
+            # Trainer for model + dataset
+            wandb_logger = WandbLogger(log_model=True)
+            trainer = pl.Trainer(
+                logger=wandb_logger,    # W&B integration
+                log_every_n_steps=250,   # set the logging frequency
+                gpus=[3],               # Select GPUs
+                max_epochs=wandb.config.max_epochs,      # number of epochs
+                deterministic=True,     # keep it deterministic
+                callbacks=[ImagePredictionLogger(samples)]
+            )
+            trainer.fit(model, dataset)
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            save_path = f"./model_weights/{timestamp}.pth"
+            torch.save(model.state_dict(), save_path)
+
+# Hyperparameter sweep - https://www.paepper.com/blog/posts/hyperparameter-tuning-on-numerai-data-with-pytorch-lightning-and-wandb/
+import wandb
+sweep_config = {
+    'method': 'random',
+    'name': 'sweep',
+    'metric': {
+        'goal': 'minimize', 
+        'name': 'train/loss'
+		},
+    'parameters': {
+        'batch_size': {'values': [64, 128, 256]},
+        'max_epochs': {'values': [20, 40]},
+        'lr': {'max': 0.001, 'min': 0.000001}
+     }
+}
+sweep_id = wandb.sweep(sweep_config, project='aesthetic-rankings2')
+wandb.agent(sweep_id, train, count=100)
