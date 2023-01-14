@@ -63,8 +63,8 @@ def compute_hash(url, text):
 
 
 def main(
-    embedding_folder="https://mystic.the-eye.eu/public/AI/cah/laion5b/embeddings/laion2B-en/img_emb/",
-    output_folder="/media/hd2/aethetic_emb_other",
+    embedding_folder="/home/matt/Desktop/ranked-aesthetic-scorer/data/outputs/toloka/embeddings/img_emb",
+    output_folder="/home/matt/Desktop/ranked-aesthetic-scorer/data/outputs/toloka/embeddings/aesthetics",
     batch_size=10**6,
     end=10**7,
     model="vit_l_14",
@@ -76,10 +76,8 @@ def main(
 
     model = get_aesthetic_model(model)
 
-    if model == "vit_l_14":
-        embs = {i: np.zeros((1, 768), "float32") for i in range(10)}
-    elif model == "vit_b_32":
-        embs = {i: np.zeros((1, 512), "float32") for i in range(10)}
+    if model.in_features:
+        embs = {i: np.zeros((1, model.in_features), "float32") for i in range(10)}
     else:
         raise ValueError(f"no model {model}")
 
