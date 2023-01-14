@@ -201,7 +201,15 @@ def dfToHTML(df, session_dir, html_name='low_agreement.html'):
 	df['img_url_a'] = df['img_url_a'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
 	df['img_url_b'] = df['img_url_b'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
 
-	# Create html file with the top 10% of disagreements
+	# If image_a_pred - image_b_pred is positive, then agreement should be >0.5
+	# Remove the rows where image_a_pred - image_b_pred is positive and agreement is >0.5
+	df = df[~((df['image_a_pred'] - df['image_b_pred']) > 0) & (df['agreement'] > 0.5)]
+	# If image_a_pred - image_b_pred is negative, then agreement should be <0.5
+	# Remove the rows where image_a_pred - image_b_pred is negative and agreement is <0.5
+	df = df[~((df['image_a_pred'] - df['image_b_pred']) < 0) & (df['agreement'] < 0.5)]
+	# Now we have rows where the aesthetic score differential disagrees with the agreement score
+
+	# Create html file of the dataset
 	df_html = df.to_html(render_links=True,escape=False)
 	with open(os.path.join(session_dir, html_name), 'w') as f:
 		f.write(df_html)
@@ -215,23 +223,6 @@ def filterTrait(df, col='agreement', n=0.7, s='<', name='low_agreement'):
 	filter_df.to_csv(os.path.join(session_dir, name+'.csv'))
 	return filter_df
 
-def findDisagreements(df):
-	url_groups = df.groupby(['INPUT:image_a', 'INPUT:image_b'])
-	url_results = {}
-	for name, group in url_groups:
-		a_wins = group[group['OUTPUT:result'] == 'image_a'].shape[0]
-		b_wins = group[group['OUTPUT:result'] == 'image_b'].shape[0]
-		url_results[name] = {'image_a': a_wins, 'image_b': b_wins}
-	# Convert to ratio
-	for key, value in url_results.items():
-		total = value['image_a'] + value['image_b']
-		value['agreement'] = value['image_a'] / total if value['image_a'] > value['image_b'] else value['image_b'] / total
-	results_df = pd.DataFrame.from_dict(url_results, orient='index')
-	results_df = results_df.sort_values(by='agreement', ascending=False)
-	results_df.to_csv(os.path.join(session_dir, 'agreement_results.csv'))
-	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement') # Could return this df to get new filtered one, but we just want to visualize
-	
-
 import pandas as pd
 def tsvTocsv(tsv_path, session_dir, csv_name='wds.csv'):
 	df = pd.read_csv(tsv_path, sep='\t')
@@ -239,14 +230,6 @@ def tsvTocsv(tsv_path, session_dir, csv_name='wds.csv'):
 	csv_name = os.path.join(session_dir, csv_name)
 	unique_urls.to_csv(csv_name, index=False)
 	return csv_name
-
-# def filterPairs(parquet_path):
-	# Load parquet file
-	# df = pd.read_parquet(parquet_path)
-	# df = filterBadAssignments(df) # ASSIGNMENT:status != APPROVED
-	# df = filterBadInputs(df) # OUTPUT:result != INPUT:image_a | INPUT:image_b
-	# disagreements = findDisagreements(df)
-	# df = filterBadWorkers(df)
 
 def loadMetadata(dir):
 	# Load all the parquet files in the dir and pd.concat them
@@ -343,7 +326,6 @@ def compute_hash(image_path):
 	total = (image_path[0]).encode("utf-8")
 	return mmh3.hash64(total)[0]
 
-
 def calcEmbeddingAesthetics(emb_dir):
 	embedding_folder=os.path.join(emb_dir, "img_emb")
 	metadata_folder=os.path.join(emb_dir, "metadata")
@@ -425,7 +407,7 @@ def makePairDF(toloka_df, meta_df):
 	results_df = pd.DataFrame.from_dict(url_results, orient='index')
 	results_df = results_df.sort_values(by='agreement', ascending=False)
 	results_df.to_csv(os.path.join(session_dir, 'agreement_results.csv'))
-	filterTrait(results_df, col='agreement', n=0.7, s='<', name='low_agreement') # just for visualization using html
+	filterTrait(results_df, col='agreement', n=1.1, s='<', name='low_agreement') # just for visualization using html
 	return results_df
 
 def createPairs(wds_dir, emb_dir, tsv_path, session_dir, name='toloka5'):
