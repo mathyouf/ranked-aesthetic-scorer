@@ -194,7 +194,7 @@ def dfToHTML(df, session_dir, html_name='low_agreement.html'):
 	df['img_url_a'] = df.index.map(lambda x: x[0])
 	df['img_url_b'] = df.index.map(lambda x: x[1])
 	# Form the column orderings
-	df = df[['img_url_a', 'image_a', 'image_b','img_url_b', 'agreement']]
+	df = df[['img_url_a', 'image_a_pred', 'image_a', 'image_b', 'image_b_pred', 'img_url_b', 'agreement']]
 	# Drop the index
 	df = df.reset_index(drop=True)
 	# Map img_url_a and img_url_b to img html
@@ -411,8 +411,9 @@ def makePairDF(toloka_df, meta_df):
 		# Get which index of meta_df the meta_image_a row is at
 		image_a_emb_idx = meta_image_a.index[0]
 		image_b_emb_idx = meta_image_b.index[0]
-		a_pred = meta_image_a['prediction'].values[0]
-		b_pred = meta_image_b['prediction'].values[0]
+		# Round to three decimal places
+		a_pred = round(meta_image_a['prediction'].values[0], 2)
+		b_pred = round(meta_image_b['prediction'].values[0], 2)
 		# Filter urls not with embeddings
 		url_results[name] = {	'image_a': a_wins, 'image_b': b_wins, 
 								'image_a_emb_idx': image_a_emb_idx, 'image_b_emb_idx': image_b_emb_idx,
