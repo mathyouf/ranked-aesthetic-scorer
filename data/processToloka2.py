@@ -198,19 +198,37 @@ def dfToHTML(df, session_dir, html_name='low_agreement.html'):
 	# Drop the index
 	df = df.reset_index(drop=True)
 	# Map img_url_a and img_url_b to img html
-	df['img_url_a'] = df['img_url_a'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
-	df['img_url_b'] = df['img_url_b'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px">''')
+	# Put green border around image_a and red border around image_b
+	df['img_url_a'] = df['img_url_a'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px; border: 5px solid green">''')
+	df['img_url_b'] = df['img_url_b'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px; border: 5px solid red">''')
+
+	# Create new column with the difference between image_a_pred and image_b_pred
+	df['aesthetic_difference'] = df['image_a_pred'] - df['image_b_pred']
+	# Round to nearest 2 decimals
+	df['aesthetic_difference'] = df['aesthetic_difference'].map(lambda x: round(x, 2))
+	# If its positive, make it green
+	df['aesthetic_difference'] = df['aesthetic_difference'].map(lambda x: f'''<span style="color:green">{x}</span>''' if x > 0 else f'''<span style="color:red">{x}</span>''')
+
+	# Round agreement to nearest 2 decimals
+	df['agreement'] = df['agreement'].map(lambda x: round(x*100, 2))
+	# If agreement is >0.5, make it green
+	df['agreement_html'] = df['agreement'].map(lambda x: f'''<span style="color:green">{x}%</span>''' if x > 0.5 else f'''<span style="color:red">{x}%</span>''')
 
 	# If image_a_pred - image_b_pred is positive, then agreement should be >0.5
-	# Remove the rows where image_a_pred - image_b_pred is positive and agreement is >0.5
-	df = df[~((df['image_a_pred'] - df['image_b_pred']) > 0) & (df['agreement'] > 0.5)]
-	# If image_a_pred - image_b_pred is negative, then agreement should be <0.5
-	# Remove the rows where image_a_pred - image_b_pred is negative and agreement is <0.5
-	df = df[~((df['image_a_pred'] - df['image_b_pred']) < 0) & (df['agreement'] < 0.5)]
-	# Now we have rows where the aesthetic score differential disagrees with the agreement score
+	df_l = df[(df['image_a_pred'] - df['image_b_pred']) > 1.0] # A is aesthetically better than B by more than 0.5
+	df_l = df_l[df_l['agreement'] < 0.3] # A is rated better than B less than 0.4 of the time
+	df_r = df[(df['image_a_pred'] - df['image_b_pred']) < -1.0] # B is aesthetically better than A by more than 0.5
+	df_r = df_r[df_r['agreement'] > 0.7] # B is rated better than A more than 0.6 of the time
+	# Concatenate the two dataframes
+	df_aes_agree_mismatch = pd.concat([df_l, df_r])
+	# Sort by aesthetic difference
+	df_aes_agree_mismatch = df_aes_agree_mismatch.sort_values(by=['aesthetic_difference'], ascending=False)
+
+	# Form the column orderings
+	df_aes_agree_mismatch = df_aes_agree_mismatch[['image_a_pred', 'image_a', 'img_url_a', 'aesthetic_difference', 'agreement_html', 'img_url_b', 'image_b', 'image_b_pred']]
 
 	# Create html file of the dataset
-	df_html = df.to_html(render_links=True,escape=False)
+	df_html = df_aes_agree_mismatch.to_html(render_links=True,escape=False)
 	with open(os.path.join(session_dir, html_name), 'w') as f:
 		f.write(df_html)
 
