@@ -197,22 +197,25 @@ def dfToHTML(df, session_dir, html_name='low_agreement.html'):
 	df = df[['img_url_a', 'image_a_pred', 'image_a', 'image_b', 'image_b_pred', 'img_url_b', 'agreement']]
 	# Drop the index
 	df = df.reset_index(drop=True)
+	# pick two good neutral opposite colors
+	image_a_color = "blue"
+	image_b_color = "gold"
 	# Map img_url_a and img_url_b to img html
 	# Put green border around image_a and red border around image_b
-	df['img_url_a'] = df['img_url_a'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px; border: 5px solid green">''')
-	df['img_url_b'] = df['img_url_b'].map(lambda x: '''<img src="''' + x + '''" width="256" style="max-height:256px; border: 5px solid red">''')
+	df['img_url_a'] = df['img_url_a'].map(lambda x: '''<img src="''' + x + f'''" width="256" style="max-height:256px; border: 5px solid {image_a_color}">''')
+	df['img_url_b'] = df['img_url_b'].map(lambda x: '''<img src="''' + x + f'''" width="256" style="max-height:256px; border: 5px solid {image_b_color}">''')
 
 	# Create new column with the difference between image_a_pred and image_b_pred
 	df['aesthetic_difference'] = df['image_a_pred'] - df['image_b_pred']
 	# Round to nearest 2 decimals
 	df['aesthetic_difference'] = df['aesthetic_difference'].map(lambda x: round(x, 2))
 	# If its positive, make it green
-	df['aesthetic_difference'] = df['aesthetic_difference'].map(lambda x: f'''<span style="color:green">{x}</span>''' if x > 0 else f'''<span style="color:red">{x}</span>''')
+	df['aesthetic_difference'] = df['aesthetic_difference'].map(lambda x: f'''<span style="color:{image_a_color}">🤖🫶{x}</span>''' if x > 0 else f'''<span style="color:{image_b_color}">🤖🫶{x}</span>''')
 
 	# Round agreement to nearest 2 decimals
 	df['agreement'] = df['agreement'].map(lambda x: round(x*100, 2))
 	# If agreement is >0.5, make it green
-	df['agreement_html'] = df['agreement'].map(lambda x: f'''<span style="color:green">{x}%</span>''' if x > 0.5 else f'''<span style="color:red">{x}%</span>''')
+	df['agreement_html'] = df['agreement'].map(lambda x: f'''<span style="color:{image_a_color}">🧍🗳️{x}%</span>''' if x > 50 else f'''<span style="color:{image_b_color}">🧍🗳️{x}%</span>''')
 
 	# If image_a_pred - image_b_pred is positive, then agreement should be >0.5
 	df_l = df[(df['image_a_pred'] - df['image_b_pred']) > 1.0] # A is aesthetically better than B by more than 0.5
