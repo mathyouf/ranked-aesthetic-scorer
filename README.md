@@ -24,6 +24,8 @@ Idea: Compare subreddits about learning a skill vs pro stuff from that skill (ph
 
 `python data/processURS.py`
 
+HF Dataset Location: https://huggingface.co/datasets/MathYouF/reddit-urs-sfw-nature
+
 
 # Sites
 [Disagreement Images >70%](https://mathyouf.github.io/ranked-aesthetic-scorer/sites/top_10_percent.html)
