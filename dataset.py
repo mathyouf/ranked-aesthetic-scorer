@@ -68,9 +68,12 @@ class PairRankPoolDataset(Dataset):
         # urls from first value in index
         url1 = pair['Unnamed: 0']
         url2 = pair['Unnamed: 1']
+        # Default aesthetic scores
+        image_a_aes_default = pair['image_a_pred']
+        image_b_aes_default = pair['image_b_pred']
         # Convert all values to tensors
         label = torch.tensor(pair['agreement'], dtype=torch.float32)
-        return {'emb1': x1, 'emb2': x2, 'label': label, 'url1': url1, 'url2': url2, 'caption1': 'toloka_a', 'caption2': 'toloka_b'}
+        return {'emb1': x1, 'emb2': x2, 'label': label, 'url1': url1, 'url2': url2, 'caption1': 'toloka_a', 'caption2': 'toloka_b', 'image_a_aes_default': image_a_aes_default, 'image_b_aes_default': image_b_aes_default}
 
     def __len__(self):
         return len(self.pair_metadata)

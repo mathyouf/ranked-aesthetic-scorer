@@ -20,3 +20,6 @@ aesthetic-rankings
 
 # For caching datasets
 cache
+
+# Weights
+!model_weights/2023-01-14_19-07-05.pth
