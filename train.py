@@ -131,6 +131,47 @@ def train(config=None):
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             save_path = f"./model_weights/{timestamp}.pth"
             torch.save(model.state_dict(), save_path)
+            # Now we distill the model to a single linear layer and adjust the output to a Cumulative Distribution Function
+            test()
+
+import numpy as np
+def test(model):
+    def distill_model(model):
+        def get_bias(model):
+            zero = torch.zeros(model.input_size)
+            with torch.no_grad():
+               bias = model(zero)
+            return bias
+        def get_weights(model):
+            one_hot = torch.eye(model.input_size)
+            with torch.no_grad():
+                weights = model(one_hot) - bias
+            return weights
+        bias = get_bias(model)
+        weights = get_weights(model)
+        distilled_model = lambda x: torch.matmul(x, weights) + bias
+        return distilled_model
+
+    def make_cdf(model, embs):    
+        unnormalized_scores = model(embs)
+        counts, edges = np.histogram(unnormalized_scores)  # check this is normalized to sum to 1
+        probs = counts / np.sum(counts)
+        ecdf = np.cumsum(probs)
+
+        def run_cdf(unnormalized_score):
+            change_point =  np.diff(np.int(unnormalized_score < edges))
+            return np.dot(ecdf, change_point)
+        return run_cdf
+    
+    # Get embeddings
+    embeddings = ...
+    # Distill model
+    distilled_model = distill_model(model)
+    # Make CDF
+    run_cdf = make_cdf(distilled_model, embeddings)
+    run_cdf(distilled_model(get_embedding(image)))
+    
+
 
 # Hyperparameter sweep - https://www.paepper.com/blog/posts/hyperparameter-tuning-on-numerai-data-with-pytorch-lightning-and-wandb/
 def sweep():
